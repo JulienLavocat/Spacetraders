@@ -1,0 +1,6 @@
+version: '3'
+
+tasks:
+  openapi: ./scripts/generate_client.sh
+  start: go run cmd/main.go
+

@@ -1,30 +1,87 @@
 package sdk
 
 import (
+	"database/sql"
+
 	. "github.com/go-jet/jet/v2/postgres"
 	. "github.com/julienlavocat/spacetraders/.gen/spacetraders/public/table"
+	"github.com/julienlavocat/spacetraders/internal/utils"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
-type Market struct{}
+type Market struct {
+	db     *sql.DB
+	logger zerolog.Logger
+}
 
-func (m *Market) SellCargoTo(systemId string, cargo map[string]int32) {
-	// SELECT id, ARRAY_AGG(product_id) AS products FROM waypoints
-	//     INNER JOIN waypoints_products ON waypoints.id = waypoints_products.waypoint_id
-	//          WHERE system_id = 'X1-QA42'
-	//            AND product_id IN ('ALUMINUM_ORE', 'IRON_ORE', 'COPPER_ORE', 'SILICON_CRYSTALS') AND export = false
-	// GROUP BY id
+type SellPlan struct {
+	ToSell   Cargo
+	Location string
+}
 
+func NewMarket(db *sql.DB) *Market {
+	return &Market{
+		db:     db,
+		logger: log.With().Str("component", "Market").Logger(),
+	}
+}
+
+func (m *Market) SellCargoTo(systemId string, cargo Cargo) []SellPlan {
 	var products []Expression
 	for product := range cargo {
 		products = append(products, String(product))
 	}
 
-	query := Waypoints.SELECT(Waypoints.ID, Raw("ARRAY_AGG(product_id)").AS("products")).
+	query := Waypoints.SELECT(Waypoints.ID.AS("id"), Raw("ARRAY_AGG(product_id)").AS("products"), Raw("ARRAY_LENGTH(ARRAY_AGG(product_id), 1)").AS("count")).
 		FROM(WaypointsProducts.INNER_JOIN(Waypoints, Waypoints.ID.EQ(WaypointsProducts.WaypointID))).
 		WHERE(Waypoints.SystemID.EQ(String(systemId)).
 			AND(WaypointsProducts.ProductID.IN(products...)).
 			AND(WaypointsProducts.Export.EQ(Bool(false)))).
-		GROUP_BY(Waypoints.ID)
+		GROUP_BY(Waypoints.ID).ORDER_BY(Raw("count").DESC())
 
-	println(query.DebugSql())
+	// TODO: Using market data, find the most appropriate destinations (i.e the destination where the total sell value PER UNIT (so total sell value / number of items sold) is the best)
+	// For now, we just sorts by number of commodities that can be sold
+	// Also, it would be ideal to take into account the amount of fuel used to get to the destination as a parameter
+
+	var locations []struct {
+		ID       string
+		Products string
+	}
+
+	err := query.Query(m.db, &locations)
+	if err != nil {
+		log.Fatal().Err(err).Str("query", query.DebugSql()).Msg("unable to query waypoints")
+	}
+
+	log.Info().Interface("cargo", cargo).Interface("locations", locations).Msg("found these locations matching the cargo")
+
+	var sellPlan []SellPlan
+	productsSold := utils.NewSet[string]()
+
+	for _, location := range locations {
+		products := utils.NewSetFrom(utils.GetStringArrayFromSqlString(location.Products))
+
+		toSellAtLocation := products.Difference(productsSold)
+
+		productsSold = productsSold.Union(toSellAtLocation)
+
+		if toSellAtLocation.Size() == 0 {
+			continue
+		}
+
+		cargoToSell := make(Cargo)
+		for _, v := range toSellAtLocation.Values() {
+			cargoToSell[v] = cargo[v]
+		}
+
+		sellPlan = append(sellPlan, SellPlan{
+			Location: location.ID,
+			ToSell:   cargoToSell,
+		})
+	}
+
+	log.Info().Interface("plan", sellPlan).Msg("established sell plan")
+
+	return sellPlan
 }

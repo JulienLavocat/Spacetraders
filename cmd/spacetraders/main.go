@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"time"
+
+	_ "github.com/lib/pq"
 
 	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
@@ -15,6 +18,12 @@ import (
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
+	db, err := sql.Open("postgres", "postgresql://spacetraders@localhost:5432/spacetraders?sslmode=disable")
+	if err != nil {
+		log.Fatal().Err(err).Msg("database connection failed")
+	}
+	defer db.Close()
+
 	client := loadAgent()
 
 	agentRes, http, err := client.AgentsAPI.GetMyAgent(context.Background()).Execute()
@@ -24,10 +33,8 @@ func main() {
 	shipsData, http, err := client.FleetAPI.GetMyShips(context.Background()).Execute()
 	utils.FatalIfHttpError(http, err, log.Logger, "unable to retrieve ships")
 
+	market := sdk.NewMarket(db)
 	ship := sdk.NewShip(client, shipsData.Data[0])
-
-	system := sdk.NewSystem(client, ship.Nav.SystemSymbol)
-	log.Info().Interface("waypoints", system.GetByImports(api.COPPER_ORE)).Msg("Found copper ore locations")
 
 	asteroidRes, http, err := client.SystemsAPI.GetSystemWaypoints(context.Background(), ship.Nav.SystemSymbol).Type_(api.ENGINEERED_ASTEROID).Execute()
 	utils.FatalIfHttpError(http, err, log.Logger, "unable to find an engineered asteroid")
@@ -40,7 +47,10 @@ func main() {
 
 	for !ship.DeliverAndFulfillContract(contract).Fulfilled {
 		if ship.IsCargoFull {
-			ship.NavigateTo("X1-QA42-H51").SellFullCargo()
+			plan := market.SellCargoTo(ship.Nav.SystemSymbol, ship.Cargo)
+			for _, step := range plan {
+				ship.Sell(step)
+			}
 		}
 
 		ship.NavigateTo(asteroid.Symbol).Refuel().Mine()

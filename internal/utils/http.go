@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -10,7 +11,10 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const RPS_LIMIT = 2
+const (
+	RPS_LIMIT = 2
+	MAX_RETRY = 5
+)
 
 var burstDepleted = false
 
@@ -19,23 +23,15 @@ func FatalIfHttpError(res *http.Response, err error, logger zerolog.Logger, msg 
 		return
 	}
 
-	body, readBodyErr := io.ReadAll(res.Body)
-	if readBodyErr != nil {
-		logger.Fatal().Err(err).Msg("unable to read error body")
-	}
-
 	event := logger.Fatal().Err(err)
 
-	if strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
-		var result map[string]any
-		err := json.Unmarshal(body, &result)
-		if err != nil {
-			logger.Warn().Msg("server sent an invalid json")
-			event.Str("body", string(body))
-			return
-		}
+	isJson, json, body, err := ReadJsonFromBody(res)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("unable to read response body")
+	}
 
-		event.Interface("body", result)
+	if isJson {
+		event.Interface("body", json)
 	} else {
 		event.Str("body", string(body))
 	}
@@ -51,11 +47,6 @@ func FatalIfNotRateLimitError(response *http.Response, err error, logger zerolog
 		}
 
 		sleepFor := resetAt.Add(time.Second).Sub(time.Now().UTC())
-		// We've hit the burst limit and are now limited by the regular pool (i.e RPS_LIMIT)
-		// isBurstLimit := sleepFor.Seconds() <= RPS_LIMIT
-		// if isBurstLimit {
-		// 	sleepFor += time.Minute
-		// }
 
 		logger.Info().Msgf("hitting rate limit, resets at %s (sleeping for %.2f)", resetAt, sleepFor.Seconds())
 		time.Sleep(sleepFor)
@@ -64,4 +55,62 @@ func FatalIfNotRateLimitError(response *http.Response, err error, logger zerolog
 
 	FatalIfHttpError(response, err, logger, msg, args...)
 	return false
+}
+
+func RetryRequest[T any](execute func() (*T, *http.Response, error), logger zerolog.Logger, msg string, args ...interface{}) *T {
+	for i := 0; i < MAX_RETRY; i++ {
+		res, http, err := execute()
+
+		if FatalIfNotRateLimitError(http, err, logger, msg, args...) {
+			continue
+		}
+
+		return res
+	}
+
+	logger.Fatal().Err(errors.New("max retry exceeded")).Msgf(msg, args...)
+	return nil
+}
+
+func RetryRequestWithoutFatal[T any](execute func() (*T, *http.Response, error), logger zerolog.Logger, msg string, args ...interface{}) (*T, *http.Response, error) {
+	for i := 0; i < MAX_RETRY; i++ {
+		res, response, err := execute()
+
+		if response.StatusCode == 429 {
+			resetAt, err := time.Parse(time.RFC3339, response.Header.Get("x-ratelimit-reset"))
+			if err != nil {
+				logger.Error().Msgf("unable to parse rate limit date: %s, sleeping for 1m", response.Header.Get("x-ratelimit-reset"))
+				time.Sleep(time.Minute)
+				continue
+			}
+
+			sleepFor := resetAt.Add(time.Second).Sub(time.Now().UTC())
+
+			logger.Info().Msgf("hitting rate limit, resets at %s (sleeping for %.2f)", resetAt, sleepFor.Seconds())
+			time.Sleep(sleepFor)
+			continue
+		}
+
+		return res, response, err
+	}
+
+	return nil, nil, errors.New("max retry exceeded")
+}
+
+func ReadJsonFromBody(response *http.Response) (bool, map[string]any, string, error) {
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return false, nil, "", err
+	}
+
+	isJson := strings.HasPrefix(response.Header.Get("Content-Type"), "application/json")
+	var jsonBody map[string]any
+	if isJson {
+		err := json.Unmarshal(body, &jsonBody)
+		if err != nil {
+			return false, nil, string(body), err
+		}
+	}
+
+	return isJson, jsonBody, string(body), err
 }

@@ -28,6 +28,7 @@ Tasks are managed using [Taskfile](https://taskfile.dev/)
 
 Generates the OpenAPI client, to be used when the game updates.
 Note: Some manual works is required after this command due to conflict with some constant names but nothing taking more than 5 minutes.
+Also, search for `data failed to match schemas in oneOf(ExtractResources201ResponseDataEventsInner)` and make so that it doesn't returns an error anymore. THIS NEEDS TO BE FIXED!!!
 
 ```bash
 task openapi

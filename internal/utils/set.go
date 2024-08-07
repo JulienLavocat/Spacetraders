@@ -15,6 +15,12 @@ func (s *Set[T]) Add(v T) {
 	s.list[v] = struct{}{}
 }
 
+func (s *Set[T]) AddValues(values []T) {
+	for i := range values {
+		s.Add(values[i])
+	}
+}
+
 func (s *Set[T]) Remove(v T) {
 	delete(s.list, v)
 }
@@ -33,6 +39,7 @@ func (s *Set[T]) Values() []T {
 	i := 0
 	for k := range s.list {
 		keys[i] = k
+		i++
 	}
 
 	return keys
@@ -43,4 +50,45 @@ func NewSet[T comparable]() *Set[T] {
 		list: map[T]struct{}{},
 	}
 	return s
+}
+
+func NewSetFrom[T comparable](values []T) *Set[T] {
+	set := NewSet[T]()
+	set.AddValues(values)
+	return set
+}
+
+func (s *Set[T]) Union(s2 *Set[T]) *Set[T] {
+	res := NewSet[T]()
+	for v := range s.list {
+		res.Add(v)
+	}
+
+	for v := range s2.list {
+		res.Add(v)
+	}
+	return res
+}
+
+func (s *Set[T]) Intersect(s2 *Set[T]) *Set[T] {
+	res := NewSet[T]()
+	for v := range s.list {
+		if !s2.Has(v) {
+			continue
+		}
+		res.Add(v)
+	}
+	return res
+}
+
+// Difference returns the subset from s, that doesn't exists in s2 (param)
+func (s *Set[T]) Difference(s2 *Set[T]) *Set[T] {
+	res := NewSet[T]()
+	for v := range s.list {
+		if s2.Has(v) {
+			continue
+		}
+		res.Add(v)
+	}
+	return res
 }

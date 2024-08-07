@@ -15,7 +15,7 @@ type Ship struct {
 	ctx             context.Context
 	Fuel            api.ShipFuel
 	client          *api.APIClient
-	Cargo           map[string]int32
+	Cargo           Cargo
 	Nav             api.ShipNav
 	Id              string
 	refuelThreshold int32
@@ -68,12 +68,11 @@ func (s *Ship) NavigateTo(waypoint string) *Ship {
 
 	s.logger.Info().
 		Str("shipId", s.Id).
+		Interface("result", res).
 		Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
 
 	s.setNav(res.Data.Nav)
 	s.Fuel = res.Data.Fuel
-
-	s.enterCooldown(navigationTime)
 
 	s.logger.Info().Str("shipId", s.Id).Msgf("navigated to %s", waypoint)
 
@@ -112,12 +111,16 @@ func (s *Ship) Dock() *Ship {
 	return s
 }
 
-func (s *Ship) SellFullCargo() *Ship {
+func (s *Ship) Sell(plan SellPlan) *Ship {
+	s.NavigateTo(plan.Location)
+
 	s.Dock()
 
-	for product, amount := range s.Cargo {
-		res, http, err := s.client.FleetAPI.SellCargo(s.ctx, s.Id).SellCargoRequest(*api.NewSellCargoRequest(api.TradeSymbol(product), amount)).Execute()
-		utils.FatalIfHttpError(http, err, s.logger, "unable to sell %d %s at %s", amount, product, s.Nav.WaypointSymbol)
+	for product, amount := range plan.ToSell {
+		res := utils.RetryRequest(
+			s.client.FleetAPI.SellCargo(s.ctx, s.Id).SellCargoRequest(*api.NewSellCargoRequest(api.TradeSymbol(product), amount)).Execute,
+			s.logger, "unable to sell %d %s at %s", amount, product, s.Nav.WaypointSymbol)
+
 		s.setCargo(res.Data.Cargo)
 
 		tx := res.Data.Transaction
@@ -215,9 +218,16 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 }
 
 func (s *Ship) setNav(data api.ShipNav) {
+	s.logger.Debug().Interface("nav", data).Msg("navigation updated")
+
 	s.Nav = data
 	s.IsDocked = data.Status == api.DOCKED
 	s.IsInOrbit = data.Status == api.IN_ORBIT
+
+	if s.Nav.Route.Arrival.After(time.Now().UTC()) {
+		navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
+		s.enterCooldown(navigationTime)
+	}
 }
 
 func (s *Ship) setCargo(data api.ShipCargo) {

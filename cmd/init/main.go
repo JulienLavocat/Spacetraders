@@ -199,6 +199,18 @@ func insertWaypoints(db *sql.DB) {
 						}
 
 					}
+
+					if trait.Symbol == api.SHIPYARD {
+						res := utils.RetryRequest(client.SystemsAPI.GetShipyard(context.Background(), waypoint.SystemSymbol, waypoint.Symbol).Execute, log.Logger, "unable to fetch shipyard for waypoint %s", waypoint.Symbol)
+						for _, product := range res.Data.ShipTypes {
+							hasProducts = true
+							insertWaypointsProducts.MODEL(model.WaypointsProducts{
+								WaypointID: waypoint.Symbol,
+								ProductID:  string(product.Type),
+								Export:     true,
+							})
+						}
+					}
 				}
 
 				for _, modifier := range waypoint.Modifiers {

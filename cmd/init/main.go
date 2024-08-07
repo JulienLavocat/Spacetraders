@@ -50,10 +50,7 @@ func insertSystems(db *sql.DB) {
 		insertSystems := Systems.INSERT(Systems.AllColumns).ON_CONFLICT(Systems.ID).DO_NOTHING()
 		insertFactionsSystems := FactionsSystems.INSERT(FactionsSystems.AllColumns).ON_CONFLICT(FactionsSystems.AllColumns...).DO_NOTHING()
 
-		res, http, err := client.SystemsAPI.GetSystems(context.Background()).Page(int32(page)).Limit(20).Execute()
-		if utils.FatalIfNotRateLimitError(http, err, log.Logger, "failed to fetch systems at page %d", page) {
-			continue
-		}
+		res := utils.RetryRequest(client.SystemsAPI.GetSystems(context.Background()).Page(int32(page)).Limit(20).Execute, log.Logger, "failed to fetch systems at page %d", page)
 
 		maxPage = int(math.Ceil(float64(res.Meta.Total)/float64(PAGE_SIZE))) + 1
 		page++
@@ -126,10 +123,7 @@ func insertWaypoints(db *sql.DB) {
 		hasProducts := false
 		hasFaction := false
 		for page < maxPage {
-			res, http, err := client.SystemsAPI.GetSystemWaypoints(context.Background(), system.ID).Page(int32(page)).Limit(PAGE_SIZE).Execute()
-			if utils.FatalIfNotRateLimitError(http, err, log.Logger, "failed to fetch waypoints for system %s", system.ID) {
-				continue
-			}
+			res := utils.RetryRequest(client.SystemsAPI.GetSystemWaypoints(context.Background(), system.ID).Page(int32(page)).Limit(PAGE_SIZE).Execute, log.Logger, "failed to fetch waypoints for system %s", system.ID)
 
 			hasWaypoints = len(res.Data) > 0
 			log.Info().Msgf("fetching page %d of system %s, %d waypoints found", page, system.ID, len(res.Data))
@@ -167,8 +161,7 @@ func insertWaypoints(db *sql.DB) {
 					})
 
 					if trait.Symbol == api.MARKETPLACE {
-						res, http, err := client.SystemsAPI.GetMarket(context.Background(), waypoint.SystemSymbol, waypoint.Symbol).Execute()
-						utils.FatalIfNotRateLimitError(http, err, log.Logger, "unable to fetch market for waypoint %s", waypoint.Symbol)
+						res := utils.RetryRequest(client.SystemsAPI.GetMarket(context.Background(), waypoint.SystemSymbol, waypoint.Symbol).Execute, log.Logger, "unable to fetch market for waypoint %s", waypoint.Symbol)
 
 						if data, ok := res.GetDataOk(); ok {
 							if exports, ok := data.GetExportsOk(); ok {

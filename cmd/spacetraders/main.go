@@ -26,21 +26,17 @@ func main() {
 
 	client := loadAgent()
 
-	agentRes, http, err := client.AgentsAPI.GetMyAgent(context.Background()).Execute()
-	utils.FatalIfHttpError(http, err, log.Logger, "unable to retrieve agent")
+	agentRes := utils.RetryRequest(client.AgentsAPI.GetMyAgent(context.Background()).Execute, log.Logger, "unable to retrieve agent")
 	log.Info().Interface("agent", agentRes.Data).Msg("agent loaded")
 
-	shipsData, http, err := client.FleetAPI.GetMyShips(context.Background()).Execute()
-	utils.FatalIfHttpError(http, err, log.Logger, "unable to retrieve ships")
+	shipsData := utils.RetryRequest(client.FleetAPI.GetMyShips(context.Background()).Execute, log.Logger, "unable to retrieve ships")
 
 	market := sdk.NewMarket(db)
 	ship := sdk.NewShip(client, shipsData.Data[0])
 
-	asteroidRes, http, err := client.SystemsAPI.GetSystemWaypoints(context.Background(), ship.Nav.SystemSymbol).Type_(api.ENGINEERED_ASTEROID).Execute()
-	utils.FatalIfHttpError(http, err, log.Logger, "unable to find an engineered asteroid")
+	asteroidRes := utils.RetryRequest(client.SystemsAPI.GetSystemWaypoints(context.Background(), ship.Nav.SystemSymbol).Type_(api.ENGINEERED_ASTEROID).Execute, log.Logger, "unable to find and engineered asteroid")
 
-	contractsRes, http, err := client.ContractsAPI.GetContracts(context.Background()).Execute()
-	utils.FatalIfHttpError(http, err, log.Logger, "unable to retrieve contracts")
+	contractsRes := utils.RetryRequest(client.ContractsAPI.GetContracts(context.Background()).Execute, log.Logger, "unable to retrieve contract")
 
 	asteroid := asteroidRes.Data[0]
 	contract := contractsRes.Data[0]

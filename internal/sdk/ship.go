@@ -61,14 +61,12 @@ func (s *Ship) NavigateTo(waypoint string) *Ship {
 
 	s.Orbit()
 
-	res, http, err := s.client.FleetAPI.NavigateShip(s.ctx, s.Id).NavigateShipRequest(*api.NewNavigateShipRequest(waypoint)).Execute()
-	utils.FatalIfHttpError(http, err, s.logger, "unable to navigate to waypoint %s", waypoint)
+	res := utils.RetryRequest(s.client.FleetAPI.NavigateShip(s.ctx, s.Id).NavigateShipRequest(*api.NewNavigateShipRequest(waypoint)).Execute, s.logger, "unable to navigate to waypoint %s", waypoint)
 
 	navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
 
 	s.logger.Info().
 		Str("shipId", s.Id).
-		Interface("result", res).
 		Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
 
 	s.setNav(res.Data.Nav)
@@ -86,8 +84,7 @@ func (s *Ship) Orbit() *Ship {
 
 	s.logger.Info().Msg("moving to orbit")
 
-	res, http, err := s.client.FleetAPI.OrbitShip(s.ctx, s.Id).Execute()
-	utils.FatalIfHttpError(http, err, s.logger, "unable to move to orbit")
+	res := utils.RetryRequest(s.client.FleetAPI.OrbitShip(s.ctx, s.Id).Execute, s.logger, "unable to move to orbit")
 
 	s.setNav(res.Data.Nav)
 
@@ -103,8 +100,7 @@ func (s *Ship) Dock() *Ship {
 
 	s.logger.Info().Msg("docking ship")
 
-	res, http, err := s.client.FleetAPI.DockShip(s.ctx, s.Id).Execute()
-	utils.FatalIfHttpError(http, err, s.logger, "unable to dock ship")
+	res := utils.RetryRequest(s.client.FleetAPI.DockShip(s.ctx, s.Id).Execute, s.logger, "unable to dock ship")
 
 	s.setNav(res.Data.Nav)
 
@@ -134,8 +130,7 @@ func (s *Ship) Refuel() *Ship {
 	s.logger.Info().Msgf("refueling ship (%d/%d)", s.Fuel.Current, s.Fuel.Capacity)
 	s.Dock()
 
-	res, http, err := s.client.FleetAPI.RefuelShip(s.ctx, s.Id).RefuelShipRequest(*api.NewRefuelShipRequest()).Execute()
-	utils.FatalIfHttpError(http, err, s.logger, "unable to refuel ship")
+	res := utils.RetryRequest(s.client.FleetAPI.RefuelShip(s.ctx, s.Id).RefuelShipRequest(*api.NewRefuelShipRequest()).Execute, s.logger, "unable to refuel ship")
 
 	// TODO: Improve refuel logic to find the cheapest refuel point in the system, might be able to be extend search to n+1 systems in the future
 
@@ -155,8 +150,7 @@ func (s *Ship) Refuel() *Ship {
 func (s *Ship) Mine() *Ship {
 	s.Orbit()
 
-	res, http, err := s.client.FleetAPI.ExtractResources(s.ctx, s.Id).ExtractResourcesRequest(*api.NewExtractResourcesRequest()).Execute()
-	utils.FatalIfHttpError(http, err, s.logger, "unable to mine")
+	res := utils.RetryRequest(s.client.FleetAPI.ExtractResources(s.ctx, s.Id).ExtractResourcesRequest(*api.NewExtractResourcesRequest()).Execute, s.logger, "unable to mine")
 
 	s.logger.Info().Msgf("extracted %d %s, ship cargo at %d/%d", res.Data.Extraction.Yield.Units, res.Data.Extraction.Yield.Symbol, res.Data.Cargo.Units, res.Data.Cargo.Capacity)
 
@@ -193,8 +187,11 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 
 		s.NavigateTo(term.DestinationSymbol).Dock()
 
-		res, http, err := s.client.ContractsAPI.DeliverContract(s.ctx, contract.Id).DeliverContractRequest(*api.NewDeliverContractRequest(s.Id, product, amount)).Execute()
-		utils.FatalIfHttpError(http, err, s.logger, "unable to deliver %d units of %s", term.UnitsRequired, term.TradeSymbol)
+		res := utils.RetryRequest(
+			s.client.ContractsAPI.DeliverContract(s.ctx, contract.Id).DeliverContractRequest(*api.NewDeliverContractRequest(s.Id, product, amount)).Execute,
+			s.logger,
+			"unable to deliver %d units of %s",
+			term.UnitsRequired, term.TradeSymbol)
 		s.setCargo(res.Data.Cargo)
 
 		contract = res.Data.Contract
@@ -207,8 +204,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 	}
 
 	if canBeFulfilled {
-		res, http, err := s.client.ContractsAPI.FulfillContract(s.ctx, contract.Id).Execute()
-		utils.FatalIfHttpError(http, err, s.logger, "unable to fulfill contract %s", contract.Id)
+		res := utils.RetryRequest(s.client.ContractsAPI.FulfillContract(s.ctx, contract.Id).Execute, s.logger, "unable to fulfill contract %s", contract.Id)
 
 		s.logger.Info().Msgf("fulfilled contract %s for faction %s +%d (%d)", res.Data.Contract.Id, res.Data.Contract.FactionSymbol, res.Data.Contract.Terms.Payment.OnFulfilled, res.Data.Agent.Credits)
 		return res.Data.Contract

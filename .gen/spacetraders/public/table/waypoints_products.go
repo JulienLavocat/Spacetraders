@@ -22,6 +22,12 @@ type waypointsProductsTable struct {
 	Export     postgres.ColumnBool
 	Exchange   postgres.ColumnBool
 	Import     postgres.ColumnBool
+	Volume     postgres.ColumnInteger
+	Supply     postgres.ColumnString
+	Activity   postgres.ColumnString
+	Buy        postgres.ColumnInteger
+	Sell       postgres.ColumnInteger
+	UpdatedAt  postgres.ColumnTimestampz
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -67,8 +73,14 @@ func newWaypointsProductsTableImpl(schemaName, tableName, alias string) waypoint
 		ExportColumn     = postgres.BoolColumn("export")
 		ExchangeColumn   = postgres.BoolColumn("exchange")
 		ImportColumn     = postgres.BoolColumn("import")
-		allColumns       = postgres.ColumnList{WaypointIDColumn, ProductIDColumn, ExportColumn, ExchangeColumn, ImportColumn}
-		mutableColumns   = postgres.ColumnList{ExportColumn, ExchangeColumn, ImportColumn}
+		VolumeColumn     = postgres.IntegerColumn("volume")
+		SupplyColumn     = postgres.StringColumn("supply")
+		ActivityColumn   = postgres.StringColumn("activity")
+		BuyColumn        = postgres.IntegerColumn("buy")
+		SellColumn       = postgres.IntegerColumn("sell")
+		UpdatedAtColumn  = postgres.TimestampzColumn("updated_at")
+		allColumns       = postgres.ColumnList{WaypointIDColumn, ProductIDColumn, ExportColumn, ExchangeColumn, ImportColumn, VolumeColumn, SupplyColumn, ActivityColumn, BuyColumn, SellColumn, UpdatedAtColumn}
+		mutableColumns   = postgres.ColumnList{ExportColumn, ExchangeColumn, ImportColumn, VolumeColumn, SupplyColumn, ActivityColumn, BuyColumn, SellColumn, UpdatedAtColumn}
 	)
 
 	return waypointsProductsTable{
@@ -80,6 +92,12 @@ func newWaypointsProductsTableImpl(schemaName, tableName, alias string) waypoint
 		Export:     ExportColumn,
 		Exchange:   ExchangeColumn,
 		Import:     ImportColumn,
+		Volume:     VolumeColumn,
+		Supply:     SupplyColumn,
+		Activity:   ActivityColumn,
+		Buy:        BuyColumn,
+		Sell:       SellColumn,
+		UpdatedAt:  UpdatedAtColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

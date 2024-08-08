@@ -7,16 +7,13 @@ CREATE TABLE "waypoints" (
 	"faction" VARCHAR NOT NULL,
 	"orbits" VARCHAR,
 	"under_construction" BOOLEAN NOT NULL,
-	"submittedOn" TIMESTAMPTZ,
-	"submittedBy" VARCHAR,
+	"submitted_on" TIMESTAMPTZ,
+	"submitted_by" VARCHAR,
 	PRIMARY KEY("id")
 );
 
 CREATE INDEX "waypoints_index_0"
 ON "waypoints" ("system_id");
-
-CREATE UNIQUE INDEX "waypoints_index_1"
-ON "waypoints" ("symbol");
 
 CREATE TABLE "waypoints_traits" (
 	"waypoint_id" VARCHAR NOT NULL,
@@ -43,6 +40,12 @@ CREATE TABLE "waypoints_products" (
 	"export" BOOLEAN NOT NULL DEFAULT false,
 	"exchange" BOOLEAN NOT NULL DEFAULT false,
 	"import" BOOLEAN NOT NULL DEFAULT false,
+	"volume" INTEGER DEFAULT null,
+	"supply" VARCHAR DEFAULT null,
+	"activity" VARCHAR DEFAULT null,
+	"buy" INTEGER DEFAULT null,
+	"sell" INTEGER DEFAULT null,
+	"updated_at" TIMESTAMPTZ DEFAULT null,
 	PRIMARY KEY("waypoint_id", "product_id")
 );
 
@@ -58,16 +61,12 @@ CREATE TABLE "systems" (
 	PRIMARY KEY("id")
 );
 
-CREATE UNIQUE INDEX "systems_index_0"
-ON "systems" ("symbol");
 
 CREATE TABLE "factions" (
 	"id" VARCHAR NOT NULL,
 	PRIMARY KEY("id")
 );
 
-CREATE UNIQUE INDEX "factions_index_0"
-ON "factions" ("symbol");
 
 CREATE TABLE "factions_systems" (
 	"faction_id" VARCHAR NOT NULL,
@@ -88,8 +87,6 @@ CREATE TABLE "modifiers" (
 	PRIMARY KEY("id")
 );
 
-CREATE UNIQUE INDEX "modifiers_index_0"
-ON "modifiers" ("symbol");
 
 CREATE TABLE "waypoints_modifiers" (
 	"modifier_id" VARCHAR NOT NULL,

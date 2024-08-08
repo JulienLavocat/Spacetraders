@@ -7,10 +7,20 @@
 
 package model
 
+import (
+	"time"
+)
+
 type WaypointsProducts struct {
 	WaypointID string `sql:"primary_key"`
 	ProductID  string `sql:"primary_key"`
 	Export     bool
 	Exchange   bool
 	Import     bool
+	Volume     *int32
+	Supply     *string
+	Activity   *string
+	Buy        *int32
+	Sell       *int32
+	UpdatedAt  *time.Time
 }

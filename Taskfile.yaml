@@ -4,4 +4,5 @@ tasks:
   openapi: ./scripts/generate_client.sh
   start: go run cmd/spacetraders/main.go
   init: go run cmd/init/main.go 
+  jet: jet -dsn="postgresql://spacetraders@localhost:5432/spacetraders?sslmode=disable" -schema=public -path=./.gen
 

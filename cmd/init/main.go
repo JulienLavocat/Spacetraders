@@ -106,175 +106,177 @@ func insertWaypoints(db *sql.DB) {
 	}
 
 	for i, system := range systems {
-
 		log.Info().Msgf("fetching system %s %d/%d", system.ID, i, len(systems))
+		insertSystemWaypoints(client, db, system)
+	}
+}
 
-		insertWaypoint := Waypoints.INSERT(Waypoints.AllColumns).ON_CONFLICT(Waypoints.ID).DO_NOTHING()
-		insertWaypointTraits := WaypointsTraits.INSERT(WaypointsTraits.AllColumns).ON_CONFLICT(WaypointsTraits.AllColumns...).DO_NOTHING()
-		insertWaypointModifiers := WaypointsModifiers.INSERT(WaypointsModifiers.AllColumns).ON_CONFLICT(WaypointsModifiers.AllColumns...).DO_NOTHING()
-		insertWaypointsProducts := WaypointsProducts.INSERT(WaypointsProducts.AllColumns).ON_CONFLICT(WaypointsProducts.AllColumns...).DO_NOTHING()
-		insertWaypointsFactions := FactionsWaypoints.INSERT(FactionsWaypoints.AllColumns).ON_CONFLICT(FactionsWaypoints.AllColumns...).DO_NOTHING()
+func insertSystemWaypoints(client *api.APIClient, db *sql.DB, system model.Systems) {
+	insertWaypoint := Waypoints.INSERT(Waypoints.AllColumns).ON_CONFLICT(Waypoints.ID).DO_NOTHING()
+	insertWaypointTraits := WaypointsTraits.INSERT(WaypointsTraits.AllColumns).ON_CONFLICT(WaypointsTraits.AllColumns...).DO_NOTHING()
+	insertWaypointModifiers := WaypointsModifiers.INSERT(WaypointsModifiers.AllColumns).ON_CONFLICT(WaypointsModifiers.AllColumns...).DO_NOTHING()
+	insertWaypointsProducts := WaypointsProducts.INSERT(WaypointsProducts.AllColumns).ON_CONFLICT(WaypointsProducts.WaypointID, WaypointsProducts.ProductID, WaypointsProducts.Export, WaypointsProducts.Import, WaypointsProducts.Exchange).DO_NOTHING()
+	insertWaypointsFactions := FactionsWaypoints.INSERT(FactionsWaypoints.AllColumns).ON_CONFLICT(FactionsWaypoints.AllColumns...).DO_NOTHING()
 
-		maxPage := math.MaxInt
-		page := 1
-		hasWaypoints := false
-		hasTraits := false
-		hasModifiers := false
-		hasProducts := false
-		hasFaction := false
-		for page < maxPage {
-			res := utils.RetryRequest(client.SystemsAPI.GetSystemWaypoints(context.Background(), system.ID).Page(int32(page)).Limit(PAGE_SIZE).Execute, log.Logger, "failed to fetch waypoints for system %s", system.ID)
+	maxPage := math.MaxInt
+	page := 1
+	hasWaypoints := false
+	hasTraits := false
+	hasModifiers := false
+	hasProducts := false
+	hasFaction := false
+	for page < maxPage {
+		res := utils.RetryRequest(client.SystemsAPI.GetSystemWaypoints(context.Background(), system.ID).Page(int32(page)).Limit(PAGE_SIZE).Execute, log.Logger, "failed to fetch waypoints for system %s", system.ID)
 
-			hasWaypoints = len(res.Data) > 0
-			log.Info().Msgf("fetching page %d of system %s, %d waypoints found", page, system.ID, len(res.Data))
+		hasWaypoints = len(res.Data) > 0
+		log.Info().Msgf("fetching page %d of system %s, %d waypoints found", page, system.ID, len(res.Data))
 
-			maxPage = int(math.Ceil(float64(res.Meta.Total)/float64(PAGE_SIZE))) + 1
-			page++
+		maxPage = int(math.Ceil(float64(res.Meta.Total)/float64(PAGE_SIZE))) + 1
+		page++
 
-			for _, waypoint := range res.Data {
-				waypointModel := model.Waypoints{
-					ID:                waypoint.Symbol,
-					Type:              string(waypoint.Type),
-					X:                 waypoint.X,
-					Y:                 waypoint.Y,
-					SystemID:          waypoint.SystemSymbol,
-					Orbits:            waypoint.Orbits,
-					UnderConstruction: waypoint.IsUnderConstruction,
-				}
+		for _, waypoint := range res.Data {
+			waypointModel := model.Waypoints{
+				ID:                waypoint.Symbol,
+				Type:              string(waypoint.Type),
+				X:                 waypoint.X,
+				Y:                 waypoint.Y,
+				SystemID:          waypoint.SystemSymbol,
+				Orbits:            waypoint.Orbits,
+				UnderConstruction: waypoint.IsUnderConstruction,
+			}
 
-				if waypoint.Faction != nil {
-					waypointModel.Faction = string(waypoint.Faction.Symbol)
-				}
+			if waypoint.Faction != nil {
+				waypointModel.Faction = string(waypoint.Faction.Symbol)
+			}
 
-				if waypoint.Chart != nil {
-					waypointModel.SubmittedOn = waypoint.Chart.SubmittedOn
-					waypointModel.SubmittedBy = waypoint.Chart.SubmittedBy
-				}
+			if waypoint.Chart != nil {
+				waypointModel.SubmittedOn = waypoint.Chart.SubmittedOn
+				waypointModel.SubmittedBy = waypoint.Chart.SubmittedBy
+			}
 
-				insertWaypoint.MODEL(waypointModel)
+			insertWaypoint.MODEL(waypointModel)
 
-				for _, trait := range waypoint.Traits {
-					hasTraits = true
-					insertWaypointTraits.MODEL(model.WaypointsTraits{
-						WaypointID: waypoint.Symbol,
-						TraitID:    string(trait.Symbol),
-					})
+			for _, trait := range waypoint.Traits {
+				hasTraits = true
+				insertWaypointTraits.MODEL(model.WaypointsTraits{
+					WaypointID: waypoint.Symbol,
+					TraitID:    string(trait.Symbol),
+				})
 
-					if trait.Symbol == api.MARKETPLACE {
-						res := utils.RetryRequest(client.SystemsAPI.GetMarket(context.Background(), waypoint.SystemSymbol, waypoint.Symbol).Execute, log.Logger, "unable to fetch market for waypoint %s", waypoint.Symbol)
+				if trait.Symbol == api.MARKETPLACE {
+					res := utils.RetryRequest(client.SystemsAPI.GetMarket(context.Background(), waypoint.SystemSymbol, waypoint.Symbol).Execute, log.Logger, "unable to fetch market for waypoint %s", waypoint.Symbol)
 
-						if data, ok := res.GetDataOk(); ok {
-							if exports, ok := data.GetExportsOk(); ok {
-								for _, product := range exports {
-									hasProducts = true
-									insertWaypointsProducts.MODEL(model.WaypointsProducts{
-										WaypointID: waypoint.Symbol,
-										ProductID:  string(product.Symbol),
-										Export:     true,
-									})
-								}
-							}
-
-							if imports, ok := data.GetImportsOk(); ok {
-								for _, product := range imports {
-									hasProducts = true
-									insertWaypointsProducts.MODEL(model.WaypointsProducts{
-										WaypointID: waypoint.Symbol,
-										ProductID:  string(product.Symbol),
-										Import:     true,
-									})
-								}
-							}
-
-							if exchange, ok := data.GetExchangeOk(); ok {
-								for _, product := range exchange {
-									hasProducts = true
-									insertWaypointsProducts.MODEL(model.WaypointsProducts{
-										WaypointID: waypoint.Symbol,
-										ProductID:  string(product.Symbol),
-										Exchange:   true,
-									})
-								}
+					if data, ok := res.GetDataOk(); ok {
+						if exports, ok := data.GetExportsOk(); ok {
+							for _, product := range exports {
+								hasProducts = true
+								insertWaypointsProducts.MODEL(model.WaypointsProducts{
+									WaypointID: waypoint.Symbol,
+									ProductID:  string(product.Symbol),
+									Export:     true,
+								})
 							}
 						}
 
-					}
+						if imports, ok := data.GetImportsOk(); ok {
+							for _, product := range imports {
+								hasProducts = true
+								insertWaypointsProducts.MODEL(model.WaypointsProducts{
+									WaypointID: waypoint.Symbol,
+									ProductID:  string(product.Symbol),
+									Import:     true,
+								})
+							}
+						}
 
-					if trait.Symbol == api.SHIPYARD {
-						res := utils.RetryRequest(client.SystemsAPI.GetShipyard(context.Background(), waypoint.SystemSymbol, waypoint.Symbol).Execute, log.Logger, "unable to fetch shipyard for waypoint %s", waypoint.Symbol)
-						for _, product := range res.Data.ShipTypes {
-							hasProducts = true
-							insertWaypointsProducts.MODEL(model.WaypointsProducts{
-								WaypointID: waypoint.Symbol,
-								ProductID:  string(product.Type),
-								Export:     true,
-							})
+						if exchange, ok := data.GetExchangeOk(); ok {
+							for _, product := range exchange {
+								hasProducts = true
+								insertWaypointsProducts.MODEL(model.WaypointsProducts{
+									WaypointID: waypoint.Symbol,
+									ProductID:  string(product.Symbol),
+									Exchange:   true,
+								})
+							}
 						}
 					}
+
 				}
 
-				for _, modifier := range waypoint.Modifiers {
-					hasModifiers = true
-					insertWaypointModifiers.MODEL(model.WaypointsModifiers{
-						ModifierID: string(modifier.Symbol),
-						WaypointID: waypoint.Symbol,
-					})
-				}
-
-				if faction, ok := waypoint.GetFactionOk(); ok {
-					hasFaction = true
-					insertWaypointsFactions.MODEL(model.FactionsWaypoints{
-						WaypointID: waypoint.Symbol,
-						FactionID:  string(faction.Symbol),
-					})
+				if trait.Symbol == api.SHIPYARD {
+					res := utils.RetryRequest(client.SystemsAPI.GetShipyard(context.Background(), waypoint.SystemSymbol, waypoint.Symbol).Execute, log.Logger, "unable to fetch shipyard for waypoint %s", waypoint.Symbol)
+					for _, product := range res.Data.ShipTypes {
+						hasProducts = true
+						insertWaypointsProducts.MODEL(model.WaypointsProducts{
+							WaypointID: waypoint.Symbol,
+							ProductID:  string(product.Type),
+							Export:     true,
+						})
+					}
 				}
 			}
-		}
 
-		if hasWaypoints {
-			res, err := insertWaypoint.Exec(db)
-			if err != nil {
-				log.Fatal().Err(err).Msg("unable to insert waypoints")
+			for _, modifier := range waypoint.Modifiers {
+				hasModifiers = true
+				insertWaypointModifiers.MODEL(model.WaypointsModifiers{
+					ModifierID: string(modifier.Symbol),
+					WaypointID: waypoint.Symbol,
+				})
 			}
-			insertedCount, _ := res.RowsAffected()
-			log.Info().Msgf("inserted %d waypoints", insertedCount)
-		}
 
-		if hasTraits {
-			res, err := insertWaypointTraits.Exec(db)
-			if err != nil {
-				log.Fatal().Err(err).Msg("unable to insert waypoints_traits")
+			if faction, ok := waypoint.GetFactionOk(); ok {
+				hasFaction = true
+				insertWaypointsFactions.MODEL(model.FactionsWaypoints{
+					WaypointID: waypoint.Symbol,
+					FactionID:  string(faction.Symbol),
+				})
 			}
-			insertedCount, _ := res.RowsAffected()
-			log.Info().Msgf("inserted %d waypoints_traits", insertedCount)
 		}
+	}
 
-		if hasModifiers {
-			res, err := insertWaypointModifiers.Exec(db)
-			if err != nil {
-				log.Fatal().Err(err).Msg("unable to insert waypoints_modifiers")
-			}
-			insertedCount, _ := res.RowsAffected()
-			log.Info().Msgf("inserted %d waypoints_modifiers", insertedCount)
+	if hasWaypoints {
+		res, err := insertWaypoint.Exec(db)
+		if err != nil {
+			log.Fatal().Err(err).Msg("unable to insert waypoints")
 		}
+		insertedCount, _ := res.RowsAffected()
+		log.Info().Msgf("inserted %d waypoints", insertedCount)
+	}
 
-		if hasProducts {
-			res, err := insertWaypointsProducts.Exec(db)
-			if err != nil {
-				log.Fatal().Err(err).Msg("unable to insert waypoints_products")
-			}
-			insertedCount, _ := res.RowsAffected()
-			log.Info().Msgf("inserted %d waypoints_products", insertedCount)
+	if hasTraits {
+		res, err := insertWaypointTraits.Exec(db)
+		if err != nil {
+			log.Fatal().Err(err).Msg("unable to insert waypoints_traits")
 		}
+		insertedCount, _ := res.RowsAffected()
+		log.Info().Msgf("inserted %d waypoints_traits", insertedCount)
+	}
 
-		if hasFaction {
-			res, err := insertWaypointsFactions.Exec(db)
-			if err != nil {
-				log.Fatal().Err(err).Msg("unable to insert factions_waypoints")
-			}
-			insertedCount, _ := res.RowsAffected()
-			log.Info().Msgf("inserted %d factions_waypoints", insertedCount)
+	if hasModifiers {
+		res, err := insertWaypointModifiers.Exec(db)
+		if err != nil {
+			log.Fatal().Err(err).Msg("unable to insert waypoints_modifiers")
 		}
+		insertedCount, _ := res.RowsAffected()
+		log.Info().Msgf("inserted %d waypoints_modifiers", insertedCount)
+	}
+
+	if hasProducts {
+		res, err := insertWaypointsProducts.Exec(db)
+		if err != nil {
+			log.Fatal().Err(err).Msg("unable to insert waypoints_products")
+		}
+		insertedCount, _ := res.RowsAffected()
+		log.Info().Msgf("inserted %d waypoints_products", insertedCount)
+	}
+
+	if hasFaction {
+		res, err := insertWaypointsFactions.Exec(db)
+		if err != nil {
+			log.Fatal().Err(err).Msg("unable to insert factions_waypoints")
+		}
+		insertedCount, _ := res.RowsAffected()
+		log.Info().Msgf("inserted %d factions_waypoints", insertedCount)
 	}
 }
 

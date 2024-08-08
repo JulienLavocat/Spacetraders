@@ -75,8 +75,8 @@ func newWaypointsTableImpl(schemaName, tableName, alias string) waypointsTable {
 		FactionColumn           = postgres.StringColumn("faction")
 		OrbitsColumn            = postgres.StringColumn("orbits")
 		UnderConstructionColumn = postgres.BoolColumn("under_construction")
-		SubmittedOnColumn       = postgres.TimestampzColumn("submittedOn")
-		SubmittedByColumn       = postgres.StringColumn("submittedBy")
+		SubmittedOnColumn       = postgres.TimestampzColumn("submitted_on")
+		SubmittedByColumn       = postgres.StringColumn("submitted_by")
 		allColumns              = postgres.ColumnList{IDColumn, SystemIDColumn, XColumn, YColumn, TypeColumn, FactionColumn, OrbitsColumn, UnderConstructionColumn, SubmittedOnColumn, SubmittedByColumn}
 		mutableColumns          = postgres.ColumnList{SystemIDColumn, XColumn, YColumn, TypeColumn, FactionColumn, OrbitsColumn, UnderConstructionColumn, SubmittedOnColumn, SubmittedByColumn}
 	)

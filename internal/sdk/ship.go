@@ -22,6 +22,9 @@ type Ship struct {
 	IsDocked        bool
 	IsInOrbit       bool
 	IsCargoFull     bool
+	HasCargo        bool
+	CurrentCargo    int32
+	MaxCargo        int32
 }
 
 func NewShip(client *api.APIClient, ship api.Ship) *Ship {
@@ -107,20 +110,22 @@ func (s *Ship) Dock() *Ship {
 	return s
 }
 
-func (s *Ship) Sell(plan SellPlan) *Ship {
-	s.NavigateTo(plan.Location)
+func (s *Ship) Sell(plan []SellPlan) *Ship {
+	for _, step := range plan {
+		s.NavigateTo(step.Location)
 
-	s.Dock()
+		s.Dock()
 
-	for product, amount := range plan.ToSell {
-		res := utils.RetryRequest(
-			s.client.FleetAPI.SellCargo(s.ctx, s.Id).SellCargoRequest(*api.NewSellCargoRequest(api.TradeSymbol(product), amount)).Execute,
-			s.logger, "unable to sell %d %s at %s", amount, product, s.Nav.WaypointSymbol)
+		for product, amount := range step.ToSell {
+			res := utils.RetryRequest(
+				s.client.FleetAPI.SellCargo(s.ctx, s.Id).SellCargoRequest(*api.NewSellCargoRequest(api.TradeSymbol(product), amount)).Execute,
+				s.logger, "unable to sell %d %s at %s", amount, product, s.Nav.WaypointSymbol)
 
-		s.setCargo(res.Data.Cargo)
+			s.setCargo(res.Data.Cargo)
 
-		tx := res.Data.Transaction
-		s.logger.Info().Msgf("sold %d %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
+			tx := res.Data.Transaction
+			s.logger.Info().Msgf("sold %d %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
+		}
 	}
 
 	return s
@@ -213,6 +218,25 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 	return contract
 }
 
+func (s *Ship) TransferPartialCargo(shipId string, maxAmount int32) {
+	for product, amount := range s.Cargo {
+		res := utils.RetryRequest(
+			s.client.FleetAPI.TransferCargo(s.ctx, s.Id).TransferCargoRequest(*api.NewTransferCargoRequest(api.TradeSymbol(product), min(amount, maxAmount), shipId)).Execute,
+			s.logger, "unable to transfer cargo from %s to %s", s.Id, shipId)
+
+		s.setCargo(res.Data.Cargo)
+		maxAmount -= amount
+		if maxAmount <= 0 {
+			return
+		}
+	}
+}
+
+func (s *Ship) RefreshCargo() {
+	res := utils.RetryRequest(s.client.FleetAPI.GetMyShipCargo(s.ctx, s.Id).Execute, s.logger, "unable to refresh cargo")
+	s.setCargo(res.Data)
+}
+
 func (s *Ship) setNav(data api.ShipNav) {
 	s.logger.Debug().Interface("nav", data).Msg("navigation updated")
 
@@ -236,6 +260,9 @@ func (s *Ship) setCargo(data api.ShipCargo) {
 	s.logger.Debug().Interface("cargo", cargo).Msgf("cargo updated (%d/%d)", data.Units, data.Capacity)
 	s.Cargo = cargo
 	s.IsCargoFull = data.Capacity == data.Units
+	s.HasCargo = data.Units > 0
+	s.CurrentCargo = data.Units
+	s.MaxCargo = data.Capacity
 }
 
 func (s *Ship) enterCooldown(d time.Duration) {

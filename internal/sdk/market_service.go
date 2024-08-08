@@ -2,9 +2,12 @@ package sdk
 
 import (
 	"database/sql"
+	"time"
 
 	. "github.com/go-jet/jet/v2/postgres"
+	"github.com/julienlavocat/spacetraders/.gen/spacetraders/public/model"
 	. "github.com/julienlavocat/spacetraders/.gen/spacetraders/public/table"
+	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -16,8 +19,8 @@ type Market struct {
 }
 
 type SellPlan struct {
-	ToSell   Cargo
-	Location string
+	ToSell   Cargo  `json:"toSell"`
+	Location string `json:"location"`
 }
 
 func NewMarket(db *sql.DB) *Market {
@@ -84,4 +87,46 @@ func (m *Market) SellCargoTo(systemId string, cargo Cargo) []SellPlan {
 	log.Info().Interface("plan", sellPlan).Msg("established sell plan")
 
 	return sellPlan
+}
+
+func (m *Market) UpdateMarket(data api.Market) {
+	query := WaypointsProducts.INSERT(WaypointsProducts.AllColumns).
+		ON_CONFLICT(WaypointsProducts.WaypointID, WaypointsProducts.ProductID, WaypointsProducts.Export, WaypointsProducts.Import, WaypointsProducts.Exchange).
+		DO_UPDATE(SET(
+			WaypointsProducts.Export.SET(WaypointsProducts.EXCLUDED.Export),
+			WaypointsProducts.Import.SET(WaypointsProducts.EXCLUDED.Import),
+			WaypointsProducts.Exchange.SET(WaypointsProducts.EXCLUDED.Exchange),
+			WaypointsProducts.Volume.SET(WaypointsProducts.EXCLUDED.Volume),
+			WaypointsProducts.Supply.SET(WaypointsProducts.EXCLUDED.Supply),
+			WaypointsProducts.Activity.SET(WaypointsProducts.EXCLUDED.Activity),
+			WaypointsProducts.Buy.SET(WaypointsProducts.EXCLUDED.Buy),
+			WaypointsProducts.Sell.SET(WaypointsProducts.EXCLUDED.Sell),
+			WaypointsProducts.UpdatedAt.SET(WaypointsProducts.EXCLUDED.UpdatedAt),
+		))
+
+	updateTime := time.Now().UTC()
+
+	for _, product := range data.TradeGoods {
+		query.MODEL(model.WaypointsProducts{
+			WaypointID: data.Symbol,
+			ProductID:  string(product.Symbol),
+			Export:     product.Type == "EXPORT",
+			Import:     product.Type == "IMPORT",
+			Exchange:   product.Type == "EXCHANGE",
+			Volume:     &product.TradeVolume,
+			Supply:     (*string)(&product.Supply),
+			Activity:   (*string)(product.Activity),
+			Buy:        &product.PurchasePrice,
+			Sell:       &product.SellPrice,
+			UpdatedAt:  &updateTime,
+		})
+	}
+
+	res, err := query.Exec(m.db)
+	if err != nil {
+		m.logger.Println(query.DebugSql())
+		m.logger.Fatal().Err(err).Msgf("unable to update products for waypoint %s", data.Symbol)
+	}
+	affectedRows, _ := res.RowsAffected()
+	m.logger.Info().Msgf("updated %d products in waypoints %s", affectedRows, data.Symbol)
 }

@@ -18,13 +18,14 @@ type Ship struct {
 	Cargo           Cargo
 	Nav             api.ShipNav
 	Id              string
+	Role            api.ShipRole
 	refuelThreshold int32
+	CurrentCargo    int32
+	MaxCargo        int32
 	IsDocked        bool
 	IsInOrbit       bool
 	IsCargoFull     bool
 	HasCargo        bool
-	CurrentCargo    int32
-	MaxCargo        int32
 }
 
 func NewShip(client *api.APIClient, ship api.Ship) *Ship {
@@ -35,10 +36,11 @@ func NewShip(client *api.APIClient, ship api.Ship) *Ship {
 		Fuel:            ship.Fuel,
 		client:          client,
 		Cargo:           make(map[string]int32),
+		Role:            ship.Registration.Role,
 	}
 
 	s.setCargo(ship.Cargo)
-	s.setNav(ship.Nav)
+	s.setNav(ship.Nav, true)
 
 	if ship.Cooldown.RemainingSeconds > 0 {
 		s.enterCooldown(time.Duration(ship.Cooldown.RemainingSeconds) * time.Second)
@@ -72,7 +74,7 @@ func (s *Ship) NavigateTo(waypoint string) *Ship {
 		Str("shipId", s.Id).
 		Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
 
-	s.setNav(res.Data.Nav)
+	s.setNav(res.Data.Nav, false)
 	s.Fuel = res.Data.Fuel
 
 	s.logger.Info().Str("shipId", s.Id).Msgf("navigated to %s", waypoint)
@@ -89,7 +91,7 @@ func (s *Ship) Orbit() *Ship {
 
 	res := utils.RetryRequest(s.client.FleetAPI.OrbitShip(s.ctx, s.Id).Execute, s.logger, "unable to move to orbit")
 
-	s.setNav(res.Data.Nav)
+	s.setNav(res.Data.Nav, false)
 
 	s.logger.Info().Msgf("oribiting %s", s.Nav.WaypointSymbol)
 	return s
@@ -105,7 +107,7 @@ func (s *Ship) Dock() *Ship {
 
 	res := utils.RetryRequest(s.client.FleetAPI.DockShip(s.ctx, s.Id).Execute, s.logger, "unable to dock ship")
 
-	s.setNav(res.Data.Nav)
+	s.setNav(res.Data.Nav, false)
 
 	return s
 }
@@ -237,14 +239,19 @@ func (s *Ship) RefreshCargo() {
 	s.setCargo(res.Data)
 }
 
-func (s *Ship) setNav(data api.ShipNav) {
+func (s *Ship) GetSnapshot() ShipSnapshot {
+	return newShipSnapshot(s)
+}
+
+func (s *Ship) setNav(data api.ShipNav, initial bool) {
 	s.logger.Debug().Interface("nav", data).Msg("navigation updated")
 
 	s.Nav = data
 	s.IsDocked = data.Status == api.DOCKED
 	s.IsInOrbit = data.Status == api.IN_ORBIT
 
-	if s.Nav.Route.Arrival.After(time.Now().UTC()) {
+	// If ship is a probe and it's the initial load time, we don't wait for it's cooldown as they are only moved once (for market data purposes)
+	if s.Nav.Route.Arrival.After(time.Now().UTC()) && (s.Role != api.SHIP_ROLE_SATELLITE || !initial) {
 		navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
 		s.enterCooldown(navigationTime)
 	}

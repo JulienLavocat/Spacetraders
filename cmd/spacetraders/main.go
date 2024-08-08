@@ -16,11 +16,25 @@ func main() {
 	setupLogger()
 	s := sdk.NewSdk()
 
-	go rest.StartApi(s)
+	restApi := rest.NewRestApi()
 
+	go createMiningFleet(s, restApi)
+	go createMarketProbesFleet(s)
+
+	restApi.StartApi(s)
+}
+
+func createMarketProbesFleet(s *sdk.Sdk) {
+	probes := []*sdk.Ship{s.Ships["JLVC-6"]}
+	probesFleet := ai.NewMarketProbesFleet(s, probes)
+	probesFleet.BeginOperations("XI-QA42", time.Minute*2)
+}
+
+func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
 	miners := []*sdk.Ship{s.Ships["JLVC-3"], s.Ships["JLVC-4"], s.Ships["JLVC-5"]}
 	hauler := s.Ships["JLVC-1"]
 	miningFleet := ai.NewMiningFleetCommander(s, "MNG_1", miners, hauler)
+	restApi.AddMiningFleet(miningFleet)
 
 	if err := miningFleet.BeginOperations("X1-QA42"); err != nil {
 		log.Fatal().Err(err).Msg("unable to begin operations for fleet MNG_1")

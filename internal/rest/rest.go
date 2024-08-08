@@ -2,41 +2,42 @@ package rest
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/julienlavocat/spacetraders/internal/ai"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
 	"github.com/rs/zerolog/log"
 )
 
-func StartApi(s *sdk.Sdk) {
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
+type RestApi struct {
+	miningFleets map[string]*ai.MiningFleetCommander
+}
 
-	r.Use(gin.Recovery())
-
-	r.GET("/ships/:shipId", func(c *gin.Context) {
-		shipId := c.Param("shipId")
-		c.JSON(200, serializeShip(s.Ships[shipId]))
-	})
-
-	if err := r.Run(); err != nil {
-		log.Fatal().Err(err).Msg("unable to start API")
+func NewRestApi() *RestApi {
+	return &RestApi{
+		miningFleets: make(map[string]*ai.MiningFleetCommander),
 	}
 }
 
-func serializeShip(ship *sdk.Ship) ShipSnapshot {
-	return ShipSnapshot{
-		SystemId:     ship.Nav.SystemSymbol,
-		WaypointId:   ship.Nav.WaypointSymbol,
-		Id:           ship.Id,
-		Cargo:        ship.Cargo,
-		Status:       ship.Nav.Status,
-		Destination:  ship.Nav.Route.Destination.Symbol,
-		MaxFuel:      ship.Fuel.Capacity,
-		CurrentFuel:  ship.Fuel.Current,
-		MaxCargo:     ship.MaxCargo,
-		CurrentCargo: ship.CurrentCargo,
-		IsCargoFull:  ship.IsCargoFull,
-		Departure:    ship.Nav.Route.Origin.Symbol,
-		ArrivalAt:    ship.Nav.Route.Arrival,
-		DepartedAt:   ship.Nav.Route.DepartureTime,
+func (r *RestApi) AddMiningFleet(fleet *ai.MiningFleetCommander) {
+	r.miningFleets[fleet.Id] = fleet
+}
+
+func (r *RestApi) StartApi(s *sdk.Sdk) {
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+
+	router.Use(gin.Recovery())
+
+	router.GET("/ships/:shipId", func(c *gin.Context) {
+		shipId := c.Param("shipId")
+		c.JSON(200, s.Ships[shipId].GetSnapshot())
+	})
+
+	router.GET("/fleets/mining/:fleetId", func(c *gin.Context) {
+		fleetId := c.Param("fleetId")
+		c.JSON(200, r.miningFleets[fleetId].GetSnapshot())
+	})
+
+	if err := router.Run(); err != nil {
+		log.Fatal().Err(err).Msg("unable to start API")
 	}
 }

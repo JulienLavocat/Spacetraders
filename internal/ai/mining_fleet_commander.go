@@ -11,26 +11,35 @@ import (
 )
 
 type MiningFleetCommander struct {
+	Id               string
 	logger           zerolog.Logger
 	s                *sdk.Sdk
 	hauler           *sdk.Ship
 	shipNeedsHauling chan string
 	miners           map[string]*sdk.Ship
+	shipStates       map[string]string
 	systemId         string
 	target           string
+	sellPlan         []sdk.SellPlan
 }
 
 func NewMiningFleetCommander(s *sdk.Sdk, id string, miners []*sdk.Ship, hauler *sdk.Ship) *MiningFleetCommander {
 	ships := make(map[string]*sdk.Ship)
+	shipStates := make(map[string]string)
 	for _, miner := range miners {
 		ships[miner.Id] = miner
+		shipStates[miner.Id] = "IDLE"
 	}
 
+	shipStates[hauler.Id] = "IDLE"
+
 	fleet := &MiningFleetCommander{
-		logger: log.With().Str("component", "MiningFleetCommander").Str("id", id).Logger(),
-		s:      s,
-		miners: ships,
-		hauler: hauler,
+		logger:     log.With().Str("component", "MiningFleetCommander").Str("id", id).Logger(),
+		s:          s,
+		miners:     ships,
+		hauler:     hauler,
+		shipStates: shipStates,
+		Id:         id,
 	}
 
 	return fleet
@@ -63,7 +72,8 @@ func (m *MiningFleetCommander) StopOperations() {
 	// TODO: wait for miners and haulers to complete
 }
 
-func (m *MiningFleetCommander) GetState() {
+func (m *MiningFleetCommander) GetSnapshot() MiningFleetSnapshot {
+	return newMiningFleetSnapshot(m)
 }
 
 func (m *MiningFleetCommander) determineTarget() (string, error) {
@@ -114,10 +124,12 @@ func (m *MiningFleetCommander) moveFleetToTarget() {
 
 func (m *MiningFleetCommander) performMiningOperations(ship *sdk.Ship) {
 	log.Info().Msgf("%s begining mining operations", ship.Id)
+	m.shipStates[ship.Id] = "MINING"
 	for !ship.IsCargoFull {
 		ship.Mine()
 	}
 
+	m.shipStates[ship.Id] = "FULL"
 	m.logger.Info().Msgf("%s is full, waiting for cargo transfer to %s", ship.Id, m.hauler.Id)
 	m.shipNeedsHauling <- ship.Id
 }
@@ -126,6 +138,7 @@ func (m *MiningFleetCommander) performHaulingOperation() {
 	m.logger.Info().Msgf("%s begining hauling operations", m.hauler.Id)
 
 	for shipId := range m.shipNeedsHauling {
+		m.shipStates[m.hauler.Id] = "FILLING"
 		m.logger.Info().Msgf("transfering cargo from ship %s to hauler %s", shipId, m.hauler.Id)
 
 		ship := m.miners[shipId]
@@ -150,11 +163,14 @@ func (m *MiningFleetCommander) performHaulingOperation() {
 		}
 	}
 
+	m.shipStates[m.hauler.Id] = "IDLE"
 	m.logger.Info().Msg("hauling operations completed")
 }
 
 func (m *MiningFleetCommander) sellHaulerCargo() {
-	sellPlan := m.s.Market.SellCargoTo(m.systemId, m.hauler.Cargo)
-	m.hauler.Sell(sellPlan).Refuel()
+	m.shipStates[m.hauler.Id] = "SELLING"
+	m.sellPlan = m.s.Market.SellCargoTo(m.systemId, m.hauler.Cargo)
+	m.hauler.Sell(m.sellPlan).Refuel()
 	m.hauler.NavigateTo(m.target)
+	m.shipStates[m.hauler.Id] = "IDLE"
 }

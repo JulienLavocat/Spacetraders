@@ -5,6 +5,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/julienlavocat/spacetraders/.gen/spacetraders/public/model"
+	. "github.com/julienlavocat/spacetraders/.gen/spacetraders/public/table"
+	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
 	"github.com/julienlavocat/spacetraders/internal/utils"
 	"github.com/rs/zerolog"
@@ -13,26 +16,21 @@ import (
 
 type MarketProbesFleet struct {
 	s                 *sdk.Sdk
-	ships             map[string]*sdk.Ship
 	logger            zerolog.Logger
 	waypointsQueue    *list.List
 	shipsQueue        *list.List
 	marketUpdateQueue *list.List
+	probes            map[string]model.MarketProbes
 }
 
-func NewMarketProbesFleet(s *sdk.Sdk, ships []*sdk.Ship) *MarketProbesFleet {
-	probes := make(map[string]*sdk.Ship)
-	for _, ship := range ships {
-		probes[ship.Id] = ship
-	}
-
+func NewMarketProbesFleet(s *sdk.Sdk) *MarketProbesFleet {
 	return &MarketProbesFleet{
 		s:                 s,
-		ships:             probes,
 		logger:            log.With().Str("component", "MarketProbesFleet").Logger(),
 		waypointsQueue:    list.New(),
 		shipsQueue:        list.New(),
 		marketUpdateQueue: list.New(),
+		probes:            make(map[string]model.MarketProbes),
 	}
 }
 
@@ -43,8 +41,15 @@ func (m *MarketProbesFleet) BeginOperations(systemId string, updateRate time.Dur
 	// - Position the probe there
 	// - Add the probe to the ticker for the next update
 
-	for shipId := range m.ships {
-		m.shipsQueue.PushBack(shipId)
+	var probes []model.MarketProbes
+	err := MarketProbes.SELECT(MarketProbes.AllColumns).Query(m.s.DB, &probes)
+	if err != nil {
+		m.logger.Fatal().Err(err).Msg("unable to retrieve probes")
+	}
+
+	for _, probe := range probes {
+		m.probes[probe.Ship] = probe
+		m.marketUpdateQueue.PushBack(probe.Ship)
 	}
 
 	for _, marketplace := range m.getMarketplaces() {
@@ -62,26 +67,37 @@ func (m *MarketProbesFleet) BeginOperations(systemId string, updateRate time.Dur
 
 func (m *MarketProbesFleet) getMarketplaces() []string {
 	// TODO: Return all marketplaces of system
-	return []string{"X1-QA42-B7"}
+	return []string{}
 }
 
 func (m *MarketProbesFleet) placeNextProbe() {
-	waypoint := m.waypointsQueue.Front()
-	if waypoint == nil {
+	waypointEntry := m.waypointsQueue.Front()
+	if waypointEntry == nil {
 		return
 	}
 
-	ship := m.shipsQueue.Front()
-	if ship == nil {
+	shipEntry := m.shipsQueue.Front()
+	if shipEntry == nil {
 		return
 	}
 
-	m.logger.Info().Msgf("placing probe %s at marketplace %s", ship.Value.(string), waypoint.Value.(string))
-	m.ships[ship.Value.(string)].NavigateTo(waypoint.Value.(string))
+	ship := shipEntry.Value.(string)
+	waypoint := waypointEntry.Value.(string)
 
-	m.shipsQueue.Remove(ship)
-	m.waypointsQueue.Remove(waypoint)
-	m.marketUpdateQueue.PushBack(ship.Value.(string))
+	m.logger.Info().Msgf("placing probe %s at marketplace %s", ship, waypoint)
+
+	MarketProbes.INSERT(MarketProbes.AllColumns).MODEL(model.MarketProbes{
+		Ship:     ship,
+		Waypoint: waypoint,
+	})
+
+	utils.RetryRequest(
+		m.s.Client.FleetAPI.NavigateShip(context.Background(), ship).NavigateShipRequest(*api.NewNavigateShipRequest(waypoint)).Execute,
+		m.logger, "unable to place probe %s at location %s", ship, waypoint)
+
+	m.shipsQueue.Remove(shipEntry)
+	m.waypointsQueue.Remove(waypointEntry)
+	m.marketUpdateQueue.PushBack(ship)
 }
 
 func (m *MarketProbesFleet) updateMarket() {
@@ -90,10 +106,14 @@ func (m *MarketProbesFleet) updateMarket() {
 		return
 	}
 
-	ship := m.ships[shipId.Value.(string)]
+	probe := m.probes[shipId.Value.(string)]
+
 	res := utils.RetryRequest(
-		m.s.Client.SystemsAPI.GetMarket(context.Background(), ship.Nav.SystemSymbol, ship.Nav.WaypointSymbol).Execute,
-		m.logger, "unable to fetch market using ship %s at waypoint %s", ship.Id, ship.Nav.WaypointSymbol)
+		m.s.Client.SystemsAPI.GetMarket(context.Background(), probe.System, probe.Waypoint).Execute,
+		m.logger, "unable to fetch market using ship %s at waypoint %s", probe.Ship, probe.Waypoint)
+
+	m.marketUpdateQueue.Remove(shipId)
+	m.marketUpdateQueue.PushBack(shipId.Value.(string))
 
 	if len(res.Data.TradeGoods) == 0 {
 		m.logger.Warn().Msgf("no trade goods found at waypoint %s, it could be an issue with the probe fleet", res.Data.Symbol)
@@ -101,7 +121,4 @@ func (m *MarketProbesFleet) updateMarket() {
 	}
 
 	m.s.Market.UpdateMarket(res.Data)
-
-	m.marketUpdateQueue.Remove(shipId)
-	m.marketUpdateQueue.PushBack(shipId.Value.(string))
 }

@@ -25,9 +25,8 @@ func main() {
 }
 
 func createMarketProbesFleet(s *sdk.Sdk) {
-	probes := []*sdk.Ship{s.Ships["JLVC-6"]}
-	probesFleet := ai.NewMarketProbesFleet(s, probes)
-	probesFleet.BeginOperations("XI-QA42", time.Minute*2)
+	probesFleet := ai.NewMarketProbesFleet(s)
+	probesFleet.BeginOperations("XI-QA42", time.Second*10)
 }
 
 func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {

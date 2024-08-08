@@ -112,11 +112,16 @@ func (s *Ship) Dock() *Ship {
 	return s
 }
 
-func (s *Ship) Sell(plan []SellPlan) *Ship {
+func (s *Ship) Sell(plan []SellPlan) (int32, int32) {
+	revenue := int32(0)
+	expanses := int32(0)
+
 	for _, step := range plan {
 		s.NavigateTo(step.Location)
 
 		s.Dock()
+
+		expanses += s.Refuel()
 
 		for product, amount := range step.ToSell {
 			res := utils.RetryRequest(
@@ -126,14 +131,15 @@ func (s *Ship) Sell(plan []SellPlan) *Ship {
 			s.setCargo(res.Data.Cargo)
 
 			tx := res.Data.Transaction
+			revenue += tx.TotalPrice
 			s.logger.Info().Msgf("sold %d %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
 		}
 	}
 
-	return s
+	return revenue, expanses
 }
 
-func (s *Ship) Refuel() *Ship {
+func (s *Ship) Refuel() int32 {
 	s.logger.Info().Msgf("refueling ship (%d/%d)", s.Fuel.Current, s.Fuel.Capacity)
 	s.Dock()
 
@@ -151,7 +157,7 @@ func (s *Ship) Refuel() *Ship {
 		res.Data.Transaction.PricePerUnit,
 		res.Data.Agent.Credits)
 
-	return s
+	return res.Data.Transaction.TotalPrice
 }
 
 func (s *Ship) Mine() *Ship {

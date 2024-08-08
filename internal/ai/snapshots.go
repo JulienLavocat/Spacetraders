@@ -11,6 +11,8 @@ type MiningFleetSnapshot struct {
 	Miners     []sdk.ShipSnapshot `json:"miners"`
 	SellPlan   []sdk.SellPlan     `json:"sellPlan"`
 	Hauler     sdk.ShipSnapshot   `json:"hauler"`
+	Revenue    int32              `json:"revenue"`
+	Expanses   int32              `json:"expanses"`
 }
 
 func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
@@ -29,5 +31,7 @@ func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
 		Hauler:     fleet.hauler.GetSnapshot(),
 		Miners:     miners,
 		SellPlan:   fleet.sellPlan,
+		Revenue:    fleet.revenue,
+		Expanses:   fleet.expanses,
 	}
 }

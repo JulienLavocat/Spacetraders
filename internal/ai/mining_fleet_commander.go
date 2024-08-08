@@ -21,6 +21,8 @@ type MiningFleetCommander struct {
 	systemId         string
 	target           string
 	sellPlan         []sdk.SellPlan
+	revenue          int32
+	expanses         int32
 }
 
 func NewMiningFleetCommander(s *sdk.Sdk, id string, miners []*sdk.Ship, hauler *sdk.Ship) *MiningFleetCommander {
@@ -109,8 +111,7 @@ func (m *MiningFleetCommander) moveFleetToTarget() {
 		defer wg.Done()
 		if m.hauler.HasCargo {
 			m.logger.Info().Msg("hauler has cargo, selling before navigating to target")
-			plan := m.s.Market.SellCargoTo(m.systemId, m.hauler.Cargo)
-			m.hauler.Sell(plan).Refuel()
+			m.sellHaulerCargo()
 		}
 
 		m.hauler.NavigateTo(m.target)
@@ -169,8 +170,11 @@ func (m *MiningFleetCommander) performHaulingOperation() {
 
 func (m *MiningFleetCommander) sellHaulerCargo() {
 	m.shipStates[m.hauler.Id] = "SELLING"
-	m.sellPlan = m.s.Market.SellCargoTo(m.systemId, m.hauler.Cargo)
-	m.hauler.Sell(m.sellPlan).Refuel()
+	m.sellPlan = m.s.Market.CreateSellPlan(m.systemId, m.hauler.Cargo)
+	revenue, expanses := m.hauler.Sell(m.sellPlan)
+	expanses += m.hauler.Refuel()
 	m.hauler.NavigateTo(m.target)
 	m.shipStates[m.hauler.Id] = "IDLE"
+	m.revenue += revenue
+	m.expanses += expanses
 }

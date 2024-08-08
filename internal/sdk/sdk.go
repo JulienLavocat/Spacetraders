@@ -13,11 +13,13 @@ import (
 )
 
 type Sdk struct {
-	Client    *api.APIClient
-	logger    zerolog.Logger
-	Market    *Market
-	Waypoints *WaypointsService
-	Ships     map[string]*Ship
+	Client     *api.APIClient
+	logger     zerolog.Logger
+	Market     *Market
+	Waypoints  *WaypointsService
+	Navigation *Navigation
+	Ships      map[string]*Ship
+	DB         *sql.DB
 }
 
 func NewSdk() *Sdk {
@@ -30,11 +32,14 @@ func NewSdk() *Sdk {
 
 	market := NewMarket(db)
 	waypoints := NewWaypointsService(db)
+	navigation := NewNavigation(db)
 
 	sdk := &Sdk{
-		Market:    market,
-		Waypoints: waypoints,
-		logger:    logger,
+		Market:     market,
+		Waypoints:  waypoints,
+		logger:     logger,
+		Navigation: navigation,
+		DB:         db,
 	}
 
 	sdk.loadAgent()

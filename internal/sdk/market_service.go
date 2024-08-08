@@ -30,7 +30,7 @@ func NewMarket(db *sql.DB) *Market {
 	}
 }
 
-func (m *Market) SellCargoTo(systemId string, cargo Cargo) []SellPlan {
+func (m *Market) CreateSellPlan(systemId string, cargo Cargo) []SellPlan {
 	var products []Expression
 	for product := range cargo {
 		products = append(products, String(product))

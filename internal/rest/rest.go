@@ -37,6 +37,12 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 		c.JSON(200, r.miningFleets[fleetId].GetSnapshot())
 	})
 
+	router.GET("/map/:systemId", func(c *gin.Context) {
+		systemId := c.Param("systemId")
+		graphViz := s.Navigation.GetGraphViz(systemId)
+		c.String(200, graphViz)
+	})
+
 	if err := router.Run(); err != nil {
 		log.Fatal().Err(err).Msg("unable to start API")
 	}

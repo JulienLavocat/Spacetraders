@@ -13,7 +13,6 @@ func UseSchema(schema string) {
 	Factions = Factions.FromSchema(schema)
 	FactionsSystems = FactionsSystems.FromSchema(schema)
 	FactionsWaypoints = FactionsWaypoints.FromSchema(schema)
-	MarketProbes = MarketProbes.FromSchema(schema)
 	Modifiers = Modifiers.FromSchema(schema)
 	Products = Products.FromSchema(schema)
 	Systems = Systems.FromSchema(schema)

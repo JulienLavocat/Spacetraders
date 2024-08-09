@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/julienlavocat/spacetraders/internal/ai"
@@ -17,16 +18,22 @@ func main() {
 	s := sdk.NewSdk()
 
 	restApi := rest.NewRestApi()
+	go restApi.StartApi(s)
+
+	s.Init()
 
 	go createMiningFleet(s, restApi)
 	go createMarketProbesFleet(s)
 
-	restApi.StartApi(s)
+	// This allow the service to run forever
+	var wg sync.WaitGroup
+	wg.Add(1)
+	wg.Wait()
 }
 
 func createMarketProbesFleet(s *sdk.Sdk) {
 	probesFleet := ai.NewMarketProbesFleet(s)
-	probesFleet.BeginOperations("XI-QA42", time.Second*10)
+	probesFleet.BeginOperations("XI-QA42", time.Minute)
 }
 
 func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {

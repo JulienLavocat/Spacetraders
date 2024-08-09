@@ -27,20 +27,32 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 
 	router.Use(gin.Recovery())
 
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"ready": s.Ready})
+	})
+
 	router.GET("/ships/:shipId", func(c *gin.Context) {
 		shipId := c.Param("shipId")
-		c.JSON(200, s.Ships[shipId].GetSnapshot())
+
+		ship, ok := s.Ships[shipId]
+		if !ok {
+			c.JSON(404, gin.H{"error": "ship not found"})
+			return
+		}
+
+		c.JSON(200, ship.GetSnapshot())
 	})
 
 	router.GET("/fleets/mining/:fleetId", func(c *gin.Context) {
 		fleetId := c.Param("fleetId")
-		c.JSON(200, r.miningFleets[fleetId].GetSnapshot())
-	})
 
-	router.GET("/map/:systemId", func(c *gin.Context) {
-		systemId := c.Param("systemId")
-		graphViz := s.Navigation.GetGraphViz(systemId)
-		c.String(200, graphViz)
+		fleet, ok := r.miningFleets[fleetId]
+		if !ok {
+			c.JSON(404, gin.H{"error": "fleet not found"})
+			return
+		}
+
+		c.JSON(200, fleet.GetSnapshot())
 	})
 
 	if err := router.Run(); err != nil {

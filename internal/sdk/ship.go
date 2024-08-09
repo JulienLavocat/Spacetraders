@@ -14,7 +14,6 @@ type Ship struct {
 	logger          zerolog.Logger
 	ctx             context.Context
 	Fuel            api.ShipFuel
-	client          *api.APIClient
 	Cargo           Cargo
 	Nav             api.ShipNav
 	Id              string
@@ -26,17 +25,18 @@ type Ship struct {
 	IsInOrbit       bool
 	IsCargoFull     bool
 	HasCargo        bool
+	sdk             *Sdk
 }
 
-func NewShip(client *api.APIClient, ship api.Ship) *Ship {
+func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 	s := &Ship{
 		Id:              ship.Symbol,
 		logger:          log.With().Str("component", "Ship").Str("shipId", ship.Symbol).Logger(),
 		refuelThreshold: int32(float64(ship.Fuel.Capacity) * 0.25),
 		Fuel:            ship.Fuel,
-		client:          client,
 		Cargo:           make(map[string]int32),
 		Role:            ship.Registration.Role,
+		sdk:             sdk,
 	}
 
 	s.setCargo(ship.Cargo)
@@ -66,7 +66,9 @@ func (s *Ship) NavigateTo(waypoint string) *Ship {
 
 	s.Orbit()
 
-	res := utils.RetryRequest(s.client.FleetAPI.NavigateShip(s.ctx, s.Id).NavigateShipRequest(*api.NewNavigateShipRequest(waypoint)).Execute, s.logger, "unable to navigate to waypoint %s", waypoint)
+	res := utils.RetryRequest(
+		s.sdk.Client.FleetAPI.NavigateShip(s.ctx, s.Id).NavigateShipRequest(*api.NewNavigateShipRequest(waypoint)).Execute,
+		s.logger, "unable to navigate to waypoint %s", waypoint)
 
 	navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
 
@@ -89,7 +91,7 @@ func (s *Ship) Orbit() *Ship {
 
 	s.logger.Info().Msg("moving to orbit")
 
-	res := utils.RetryRequest(s.client.FleetAPI.OrbitShip(s.ctx, s.Id).Execute, s.logger, "unable to move to orbit")
+	res := utils.RetryRequest(s.sdk.Client.FleetAPI.OrbitShip(s.ctx, s.Id).Execute, s.logger, "unable to move to orbit")
 
 	s.setNav(res.Data.Nav, false)
 
@@ -105,7 +107,7 @@ func (s *Ship) Dock() *Ship {
 
 	s.logger.Info().Msg("docking ship")
 
-	res := utils.RetryRequest(s.client.FleetAPI.DockShip(s.ctx, s.Id).Execute, s.logger, "unable to dock ship")
+	res := utils.RetryRequest(s.sdk.Client.FleetAPI.DockShip(s.ctx, s.Id).Execute, s.logger, "unable to dock ship")
 
 	s.setNav(res.Data.Nav, false)
 
@@ -125,7 +127,7 @@ func (s *Ship) Sell(plan []SellPlan) (int32, int32) {
 
 		for product, amount := range step.ToSell {
 			res := utils.RetryRequest(
-				s.client.FleetAPI.SellCargo(s.ctx, s.Id).SellCargoRequest(*api.NewSellCargoRequest(api.TradeSymbol(product), amount)).Execute,
+				s.sdk.Client.FleetAPI.SellCargo(s.ctx, s.Id).SellCargoRequest(*api.NewSellCargoRequest(api.TradeSymbol(product), amount)).Execute,
 				s.logger, "unable to sell %d %s at %s", amount, product, s.Nav.WaypointSymbol)
 
 			s.setCargo(res.Data.Cargo)
@@ -143,9 +145,11 @@ func (s *Ship) Refuel() int32 {
 	s.logger.Info().Msgf("refueling ship (%d/%d)", s.Fuel.Current, s.Fuel.Capacity)
 	s.Dock()
 
-	res := utils.RetryRequest(s.client.FleetAPI.RefuelShip(s.ctx, s.Id).RefuelShipRequest(*api.NewRefuelShipRequest()).Execute, s.logger, "unable to refuel ship")
+	if !s.sdk.Waypoints.CanRefuelAt(s.Nav.WaypointSymbol) {
+		s.logger.Info().Msgf("can't refuel at %s", s.Nav.WaypointSymbol)
+	}
 
-	// TODO: Improve refuel logic to find the cheapest refuel point in the system, might be able to be extend search to n+1 systems in the future
+	res := utils.RetryRequest(s.sdk.Client.FleetAPI.RefuelShip(s.ctx, s.Id).RefuelShipRequest(*api.NewRefuelShipRequest()).Execute, s.logger, "unable to refuel ship")
 
 	s.Fuel = res.Data.Fuel
 
@@ -163,7 +167,7 @@ func (s *Ship) Refuel() int32 {
 func (s *Ship) Mine() *Ship {
 	s.Orbit()
 
-	res := utils.RetryRequest(s.client.FleetAPI.ExtractResources(s.ctx, s.Id).ExtractResourcesRequest(*api.NewExtractResourcesRequest()).Execute, s.logger, "unable to mine")
+	res := utils.RetryRequest(s.sdk.Client.FleetAPI.ExtractResources(s.ctx, s.Id).ExtractResourcesRequest(*api.NewExtractResourcesRequest()).Execute, s.logger, "unable to mine")
 
 	s.logger.Info().Msgf("extracted %d %s, ship cargo at %d/%d", res.Data.Extraction.Yield.Units, res.Data.Extraction.Yield.Symbol, res.Data.Cargo.Units, res.Data.Cargo.Capacity)
 
@@ -201,7 +205,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 		s.NavigateTo(term.DestinationSymbol).Dock()
 
 		res := utils.RetryRequest(
-			s.client.ContractsAPI.DeliverContract(s.ctx, contract.Id).DeliverContractRequest(*api.NewDeliverContractRequest(s.Id, product, amount)).Execute,
+			s.sdk.Client.ContractsAPI.DeliverContract(s.ctx, contract.Id).DeliverContractRequest(*api.NewDeliverContractRequest(s.Id, product, amount)).Execute,
 			s.logger,
 			"unable to deliver %d units of %s",
 			term.UnitsRequired, term.TradeSymbol)
@@ -217,7 +221,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 	}
 
 	if canBeFulfilled {
-		res := utils.RetryRequest(s.client.ContractsAPI.FulfillContract(s.ctx, contract.Id).Execute, s.logger, "unable to fulfill contract %s", contract.Id)
+		res := utils.RetryRequest(s.sdk.Client.ContractsAPI.FulfillContract(s.ctx, contract.Id).Execute, s.logger, "unable to fulfill contract %s", contract.Id)
 
 		s.logger.Info().Msgf("fulfilled contract %s for faction %s +%d (%d)", res.Data.Contract.Id, res.Data.Contract.FactionSymbol, res.Data.Contract.Terms.Payment.OnFulfilled, res.Data.Agent.Credits)
 		return res.Data.Contract
@@ -229,7 +233,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 func (s *Ship) TransferPartialCargo(shipId string, maxAmount int32) {
 	for product, amount := range s.Cargo {
 		res := utils.RetryRequest(
-			s.client.FleetAPI.TransferCargo(s.ctx, s.Id).TransferCargoRequest(*api.NewTransferCargoRequest(api.TradeSymbol(product), min(amount, maxAmount), shipId)).Execute,
+			s.sdk.Client.FleetAPI.TransferCargo(s.ctx, s.Id).TransferCargoRequest(*api.NewTransferCargoRequest(api.TradeSymbol(product), min(amount, maxAmount), shipId)).Execute,
 			s.logger, "unable to transfer cargo from %s to %s", s.Id, shipId)
 
 		s.setCargo(res.Data.Cargo)
@@ -241,7 +245,7 @@ func (s *Ship) TransferPartialCargo(shipId string, maxAmount int32) {
 }
 
 func (s *Ship) RefreshCargo() {
-	res := utils.RetryRequest(s.client.FleetAPI.GetMyShipCargo(s.ctx, s.Id).Execute, s.logger, "unable to refresh cargo")
+	res := utils.RetryRequest(s.sdk.Client.FleetAPI.GetMyShipCargo(s.ctx, s.Id).Execute, s.logger, "unable to refresh cargo")
 	s.setCargo(res.Data)
 }
 

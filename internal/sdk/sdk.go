@@ -20,6 +20,7 @@ type Sdk struct {
 	Navigation *Navigation
 	Ships      map[string]*Ship
 	DB         *sql.DB
+	Ready      bool
 }
 
 func NewSdk() *Sdk {
@@ -40,12 +41,18 @@ func NewSdk() *Sdk {
 		logger:     logger,
 		Navigation: navigation,
 		DB:         db,
+		Ready:      false,
 	}
 
 	sdk.loadAgent()
-	sdk.loadShips()
 
 	return sdk
+}
+
+func (s *Sdk) Init() {
+	s.loadAgent()
+	s.loadShips()
+	s.Ready = true
 }
 
 func (s *Sdk) loadAgent() {
@@ -88,7 +95,7 @@ func (s *Sdk) loadShips() {
 	ships := make(map[string]*Ship)
 
 	for _, ship := range shipsData.Data {
-		ships[ship.Symbol] = NewShip(s.Client, ship)
+		ships[ship.Symbol] = NewShip(s, ship)
 	}
 
 	s.Ships = ships

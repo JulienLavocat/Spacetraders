@@ -51,3 +51,18 @@ func (s *WaypointsService) FindMarketplaces(systemId string) []model.Waypoints {
 
 	return results
 }
+
+func (s *WaypointsService) CanRefuelAt(waypoint string) bool {
+	var results []model.WaypointsProducts
+	query := WaypointsProducts.SELECT(WaypointsProducts.WaypointID).
+		WHERE(WaypointsProducts.WaypointID.EQ(String(waypoint)).
+			AND(WaypointsProducts.ProductID.EQ(String(string(api.FUEL)))).
+			AND(WaypointsProducts.Exchange.EQ(Bool(true)).OR(WaypointsProducts.Export.EQ(Bool(true)))))
+
+	err := query.Query(s.db, &results)
+	if err != nil {
+		s.logger.Fatal().Err(err).Str("query", query.DebugSql()).Msgf("unable to check if waypoint %s offer fuel", waypoint)
+	}
+
+	return len(results) > 0
+}

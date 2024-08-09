@@ -89,6 +89,21 @@ func (m *Market) CreateSellPlan(systemId string, cargo Cargo) []SellPlan {
 	return sellPlan
 }
 
+// func (m *Market) CreateSellPlanV2(systemId string, cargo Cargo) []SellPlan {
+// 	var products []Expression
+// 	for product := range cargo {
+// 		products = append(products, String(product))
+// 	}
+//
+// 	query := Waypoints.SELECT(Waypoints.ID, WaypointsProducts.ProductID, WaypointsProducts.Sell).
+// 		FROM(WaypointsProducts.INNER_JOIN(Waypoints, Waypoints.ID.EQ(WaypointsProducts.WaypointID))).
+// 		WHERE(Waypoints.SystemID.EQ(String(systemId)).
+// 			AND(WaypointsProducts.ProductID.IN(products...)).
+// 			AND(WaypointsProducts.Export.EQ(Bool(false)))).
+// 		ORDER_BY(Raw("sell").DESC())
+//      return []
+// }
+
 func (m *Market) UpdateMarket(data api.Market) {
 	query := WaypointsProducts.INSERT(WaypointsProducts.AllColumns).
 		ON_CONFLICT(WaypointsProducts.WaypointID, WaypointsProducts.ProductID, WaypointsProducts.Export, WaypointsProducts.Import, WaypointsProducts.Exchange).

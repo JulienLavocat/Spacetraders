@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"time"
+
 	"github.com/julienlavocat/spacetraders/internal/sdk"
 )
 
@@ -13,6 +15,7 @@ type MiningFleetSnapshot struct {
 	Hauler     sdk.ShipSnapshot   `json:"hauler"`
 	Revenue    int32              `json:"revenue"`
 	Expanses   int32              `json:"expanses"`
+	StartTime  time.Time          `json:"startTime"`
 }
 
 func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
@@ -33,5 +36,6 @@ func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
 		SellPlan:   fleet.sellPlan,
 		Revenue:    fleet.revenue,
 		Expanses:   fleet.expanses,
+		StartTime:  fleet.startTime,
 	}
 }

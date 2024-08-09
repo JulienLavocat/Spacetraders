@@ -3,6 +3,7 @@ package ai
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
@@ -23,6 +24,7 @@ type MiningFleetCommander struct {
 	sellPlan         []sdk.SellPlan
 	revenue          int32
 	expanses         int32
+	startTime        time.Time
 }
 
 func NewMiningFleetCommander(s *sdk.Sdk, id string, miners []*sdk.Ship, hauler *sdk.Ship) *MiningFleetCommander {
@@ -60,6 +62,8 @@ func (m *MiningFleetCommander) BeginOperations(systemId string) error {
 	m.target = target
 	m.moveFleetToTarget()
 
+	m.startTime = time.Now().UTC()
+
 	m.shipNeedsHauling = make(chan string)
 	for _, miner := range m.miners {
 		go m.performMiningOperations(miner)
@@ -67,11 +71,6 @@ func (m *MiningFleetCommander) BeginOperations(systemId string) error {
 	m.performHaulingOperation()
 
 	return nil
-}
-
-func (m *MiningFleetCommander) StopOperations() {
-	close(m.shipNeedsHauling)
-	// TODO: wait for miners and haulers to complete
 }
 
 func (m *MiningFleetCommander) GetSnapshot() MiningFleetSnapshot {

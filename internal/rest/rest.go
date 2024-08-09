@@ -55,6 +55,11 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 		c.JSON(200, fleet.GetSnapshot())
 	})
 
+	router.GET("/market/:systemId", func(c *gin.Context) {
+		systemId := c.Param("systemId")
+		c.JSON(200, s.Market.GetTradeOpportunities(systemId))
+	})
+
 	if err := router.Run(); err != nil {
 		log.Fatal().Err(err).Msg("unable to start API")
 	}

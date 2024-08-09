@@ -1,7 +1,9 @@
 package sdk
 
 import (
+	"cmp"
 	"database/sql"
+	"slices"
 	"time"
 
 	. "github.com/go-jet/jet/v2/postgres"
@@ -21,6 +23,28 @@ type Market struct {
 type SellPlan struct {
 	ToSell   Cargo  `json:"toSell"`
 	Location string `json:"location"`
+}
+
+type OpportunityRow struct {
+	UpdatedAt time.Time
+	ID        string
+	Product   string
+	Price     int32
+	Volume    int32
+	X         int32
+	Y         int32
+}
+
+type TradeRoute struct {
+	Product                 string
+	BuyAt                   string
+	SellAt                  string
+	MaxAmount               int32
+	SellPrice               int32
+	BuyPrice                int32
+	EstimatedProfits        int32
+	EstimatedProfitsPerUnit int32
+	FuelCost                int32
 }
 
 func NewMarket(db *sql.DB) *Market {
@@ -144,4 +168,104 @@ func (m *Market) UpdateMarket(data api.Market) {
 	}
 	affectedRows, _ := res.RowsAffected()
 	m.logger.Info().Msgf("updated %d products in waypoints %s", affectedRows, data.Symbol)
+}
+
+func (m *Market) GetTradeOpportunities(systemId string) any {
+	buyQuery := WaypointsProducts.
+		INNER_JOIN(Waypoints, Waypoints.ID.EQ(WaypointsProducts.WaypointID)).
+		SELECT(
+			Waypoints.ID.AS("OpportunityRow.id"),
+			Waypoints.X.AS("OpportunityRow.x"),
+			Waypoints.Y.AS("OpportunityRow.y"),
+			WaypointsProducts.ProductID.AS("OpportunityRow.product"),
+			WaypointsProducts.Buy.AS("OpportunityRow.price"),
+			WaypointsProducts.UpdatedAt.AS("OpportunityRow.updated_at"),
+			WaypointsProducts.Volume.AS("OpportunityRow.volume")).
+		WHERE(Waypoints.SystemID.EQ(String(systemId)).
+			AND(WaypointsProducts.Exchange.EQ(Bool(true)).
+				OR(WaypointsProducts.Export.EQ(Bool(true)))).
+			AND(WaypointsProducts.UpdatedAt.IS_NOT_NULL())).
+		ORDER_BY(WaypointsProducts.Buy)
+
+	var buyResults []OpportunityRow
+	err := buyQuery.Query(m.db, &buyResults)
+	if err != nil {
+		log.Fatal().Err(err).Str("query", buyQuery.DebugSql()).Msgf("unable to query buy opportunities in %s", systemId)
+	}
+
+	sellQuery := WaypointsProducts.
+		INNER_JOIN(Waypoints, Waypoints.ID.EQ(WaypointsProducts.WaypointID)).
+		SELECT(
+			Waypoints.ID.AS("OpportunityRow.id"),
+			Waypoints.X.AS("OpportunityRow.x"),
+			Waypoints.Y.AS("OpportunityRow.y"),
+			WaypointsProducts.ProductID.AS("OpportunityRow.product"),
+			WaypointsProducts.Sell.AS("OpportunityRow.price"),
+			WaypointsProducts.UpdatedAt.AS("OpportunityRow.updated_at"),
+			WaypointsProducts.Volume.AS("OpportunityRow.volume")).
+		WHERE(Waypoints.SystemID.EQ(String(systemId)).
+			AND(WaypointsProducts.Exchange.EQ(Bool(true)).
+				OR(WaypointsProducts.Import.EQ(Bool(true)))).
+			AND(WaypointsProducts.UpdatedAt.IS_NOT_NULL())).
+		ORDER_BY(WaypointsProducts.Sell.DESC())
+
+	var sellResults []OpportunityRow
+	err = sellQuery.Query(m.db, &sellResults)
+	if err != nil {
+		log.Fatal().Err(err).Str("query", sellQuery.DebugSql()).Msgf("unable to query sell opportunities in %s", systemId)
+	}
+
+	buyOpportuinities := map[string]OpportunityRow{}
+	for _, newRow := range buyResults {
+		if currentRow, ok := buyOpportuinities[newRow.Product]; ok {
+			if newRow.Price < currentRow.Price {
+				buyOpportuinities[newRow.Product] = newRow
+			}
+		} else {
+			buyOpportuinities[newRow.Product] = newRow
+		}
+	}
+
+	sellOpportuinities := map[string]OpportunityRow{}
+	for _, newRow := range sellResults {
+		if currentRow, ok := sellOpportuinities[newRow.Product]; ok {
+			if newRow.Price > currentRow.Price {
+				sellOpportuinities[newRow.Product] = newRow
+			}
+		} else {
+			sellOpportuinities[newRow.Product] = newRow
+		}
+	}
+
+	// TODO: Calculate fuel cost for each routes
+	var tradeRoutes []TradeRoute
+	for product, buyOpportunity := range buyOpportuinities {
+		sellOpportunity, ok := sellOpportuinities[product]
+		if !ok || sellOpportunity.ID == buyOpportunity.ID {
+			continue
+		}
+
+		maxAmount := min(buyOpportunity.Volume, sellOpportunity.Volume)
+
+		tradeRoutes = append(tradeRoutes, TradeRoute{
+			Product:                 product,
+			SellPrice:               sellOpportunity.Price,
+			BuyPrice:                buyOpportunity.Price,
+			SellAt:                  sellOpportunity.ID,
+			BuyAt:                   buyOpportunity.ID,
+			MaxAmount:               maxAmount,
+			EstimatedProfits:        (sellOpportunity.Price - buyOpportunity.Price) * maxAmount,
+			EstimatedProfitsPerUnit: sellOpportunity.Price - buyOpportunity.Price,
+			FuelCost:                GetFuelCost(buyOpportunity.X, buyOpportunity.Y, sellOpportunity.X, sellOpportunity.Y),
+		})
+	}
+
+	slices.SortFunc(tradeRoutes, func(a, b TradeRoute) int {
+		return cmp.Compare(b.EstimatedProfits, a.EstimatedProfits)
+	})
+
+	return tradeRoutes
+}
+
+func (m *Market) GetProductsToSellInSystem(systemId string) {
 }

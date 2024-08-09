@@ -2,7 +2,6 @@ package sdk
 
 import (
 	"database/sql"
-	"math"
 
 	. "github.com/go-jet/jet/v2/postgres"
 	"github.com/julienlavocat/spacetraders/.gen/spacetraders/public/model"
@@ -47,7 +46,7 @@ func newSystemMap(waypoints []model.Waypoints) *SystemMap {
 				continue
 			}
 
-			fuelCost := getFuelCost(w1.X, w1.Y, w2.X, w2.Y)
+			fuelCost := GetFuelCost(w1.X, w1.Y, w2.X, w2.Y)
 			graph.SetWeightedEdge(graph.NewWeightedEdge(simple.Node(id1), simple.Node(id2), float64(fuelCost)))
 		}
 	}
@@ -77,12 +76,4 @@ func (n *Navigation) GetGraphViz(system string) string {
 	}
 
 	return string(dotViz)
-}
-
-// Source: https://github.com/SpaceTradersAPI/api-docs/wiki/Travel-Fuel-and-Time#travel-time
-func getFuelCost(x1, y1, x2, y2 int32) int32 {
-	deltaX := float64(x1 - x2)
-	deltaY := float64(y1 - y2)
-	dst := math.Sqrt(deltaX*deltaX + deltaY*deltaY)
-	return max(1, int32(math.Round(dst)))
 }

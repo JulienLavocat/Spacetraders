@@ -84,7 +84,7 @@ func (m *MarketProbesFleet) placeNextProbe() {
 	ship := shipEntry.Value.(string)
 	waypoint := waypointEntry.Value.(string)
 
-	m.logger.Info().Msgf("placing probe %s at marketplace %s", ship, waypoint)
+	m.logger.Info().Str("ship", ship).Msgf("placing probe %s at marketplace %s", ship, waypoint)
 
 	MarketProbes.INSERT(MarketProbes.AllColumns).MODEL(model.MarketProbes{
 		Ship:     ship,
@@ -116,7 +116,7 @@ func (m *MarketProbesFleet) updateMarket() {
 	m.marketUpdateQueue.PushBack(shipId.Value.(string))
 
 	if len(res.Data.TradeGoods) == 0 {
-		m.logger.Warn().Msgf("no trade goods found at waypoint %s, it could be an issue with the probe fleet", res.Data.Symbol)
+		m.logger.Warn().Str("ship", shipId.Value.(string)).Msgf("no trade goods found at waypoint %s, it could be an issue with the probe fleet", res.Data.Symbol)
 		return
 	}
 

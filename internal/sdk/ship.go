@@ -55,6 +55,10 @@ func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 
 func (s *Ship) NavigateTo(destination string) int32 {
 	s.logger.Info().Msgf("plotting route from %s to %s", s.Nav.WaypointSymbol, destination)
+	expanses := int32(0)
+
+	expanses += s.Refuel()
+
 	route, err := s.sdk.Navigation.PlotRoute(s.Nav.SystemSymbol, s.Nav.WaypointSymbol, destination, s.Fuel.Current)
 	if err != nil {
 		s.logger.Fatal().Err(err).Msg("unable to plot route")
@@ -68,7 +72,6 @@ func (s *Ship) NavigateTo(destination string) int32 {
 
 	s.logger.Info().Msgf("navigating from %s to %s", s.Nav.WaypointSymbol, destination)
 
-	expanses := int32(0)
 	for _, nextStop := range route {
 		if nextStop.To == s.Nav.WaypointSymbol {
 			s.logger.Info().Msgf("ship already at %s", nextStop.To)
@@ -94,6 +97,8 @@ func (s *Ship) NavigateTo(destination string) int32 {
 
 		s.logger.Info().Str("shipId", s.Id).Msgf("navigated to %s", nextStop.To)
 	}
+
+	expanses += s.Refuel()
 
 	return expanses
 }
@@ -133,7 +138,7 @@ func (s *Ship) Sell(plan []SellPlan) (int32, int32) {
 	expanses := int32(0)
 
 	for _, step := range plan {
-		s.NavigateTo(step.Location)
+		expanses += s.NavigateTo(step.Location)
 
 		s.Dock()
 
@@ -266,11 +271,17 @@ func (s *Ship) RefreshCargo() {
 }
 
 func (s *Ship) Buy(product string, amount int32) (int32, error) {
+	s.logger.Info().Msgf("attempting to buy %d %s at %s", amount, product, s.Nav.WaypointSymbol)
+	if amount == 0 {
+		s.logger.Warn().Msgf("attempt to buy 0 %s, aborting", product)
+		return 0, nil
+	}
 	res, errBody, err := utils.RetryRequestWithoutFatal(s.sdk.Client.FleetAPI.PurchaseCargo(s.ctx, s.Id).PurchaseCargoRequest(*api.NewPurchaseCargoRequest(api.TradeSymbol(product), amount)).Execute, s.logger)
-	if err != nil {
+	if err != nil || errBody != nil {
 		s.logger.Err(err).Interface("body", errBody).Msgf("unable to buy goods at %s", s.Nav.WaypointSymbol)
 		return 0, err
 	}
+
 	s.setCargo(res.Data.Cargo)
 
 	tx := res.Data.Transaction
@@ -283,12 +294,24 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 	revenue := int32(0)
 	expanses := int32(0)
 
+	amount := min(s.MaxCargo-s.CurrentCargo, route.MaxAmount)
 	expanses += s.NavigateTo(route.BuyAt)
-	txRevenue, err := s.Buy(route.Product, min(s.MaxCargo-s.CurrentCargo, route.MaxAmount))
-	revenue += txRevenue
+	txExpanses, err := s.Buy(route.Product, amount)
+	expanses += txExpanses
 	if err != nil {
 		return revenue, expanses, err
 	}
+
+	txRevenue, txExpanses := s.Sell([]SellPlan{
+		{
+			ToSell: Cargo{
+				route.Product: amount,
+			},
+			Location: route.SellAt,
+		},
+	})
+	expanses += txExpanses
+	revenue += txRevenue
 
 	return revenue, expanses, nil
 }

@@ -22,14 +22,20 @@ func main() {
 
 	s.Init()
 
-	ship := s.GetShip("JLVC-1")
-
-	ship.NavigateTo("X1-NT44-A2")
+	// ship, _ := s.GetShip("JLVC-1")
+	// ship.Buy("SHIP_PLATING", 2)
+	// ship.NavigateTo("X1-NT44-A2")
+	// ship.Sell([]sdk.SellPlan{
+	// 	{
+	// 		ToSell:   sdk.Cargo{"SHIP_PLATING": 11},
+	// 		Location: "X1-NT44-A2",
+	// 	},
+	// })
 
 	// go createMiningFleet(s, restApi)
-	// go createMarketProbesFleet(s)
-	// go createTradeFleet(s)
-	//
+	go createMarketProbesFleet(s)
+	go createTradeFleet(s)
+
 	// This allow the service to run forever
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -38,7 +44,7 @@ func main() {
 
 func createMarketProbesFleet(s *sdk.Sdk) {
 	probesFleet := ai.NewMarketProbesFleet(s)
-	probesFleet.BeginOperations("XI-QA42", time.Minute)
+	probesFleet.BeginOperations("XI-NT44", time.Second*5)
 }
 
 func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
@@ -53,7 +59,7 @@ func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
 }
 
 func createTradeFleet(s *sdk.Sdk) {
-	fleet := ai.NewTradingFleet(s, "TRD_1", "X1-QA42", []string{"JLVC-A"})
+	fleet := ai.NewTradingFleet(s, "TRD_1", "X1-NT44", time.Minute, []string{"JLVC-1"})
 	fleet.BeginOperations()
 }
 

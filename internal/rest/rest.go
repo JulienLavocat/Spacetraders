@@ -43,6 +43,23 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 		c.JSON(200, ship.GetSnapshot())
 	})
 
+	router.GET("/ships/:shipId/plot/:destination", func(c *gin.Context) {
+		shipId := c.Param("shipId")
+		destination := c.Param("destination")
+
+		ship, ok := s.GetShip(shipId)
+		if !ok {
+			c.JSON(404, gin.H{"error": "ship not found"})
+			return
+		}
+
+		route, err := s.Navigation.PlotRoute(ship.Nav.SystemSymbol, ship.Nav.WaypointSymbol, destination, ship.Fuel.Current)
+		if err != nil {
+			c.String(500, err.Error())
+		}
+		c.JSON(200, route)
+	})
+
 	router.GET("/fleets/mining/:fleetId", func(c *gin.Context) {
 		fleetId := c.Param("fleetId")
 
@@ -60,7 +77,7 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 		c.JSON(200, s.Market.GetTradeRoutes(systemId))
 	})
 
-	if err := router.Run("0.0.0.0:8081"); err != nil {
+	if err := router.Run("0.0.0.0:8080"); err != nil {
 		log.Fatal().Err(err).Msg("unable to start API")
 	}
 }

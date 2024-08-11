@@ -31,7 +31,7 @@ func NewSdk() *Sdk {
 		logger.Fatal().Err(err).Msg("database connection failed")
 	}
 
-	market := NewMarket(db)
+	market := NewMarket(db, nil)
 	waypoints := NewWaypointsService(db)
 	navigation := NewNavigation(db)
 
@@ -55,8 +55,9 @@ func (s *Sdk) Init() {
 	s.Ready = true
 }
 
-func (s *Sdk) GetShip(id string) *Ship {
-	return s.Ships[id]
+func (s *Sdk) GetShip(id string) (*Ship, bool) {
+	ship, ok := s.Ships[id]
+	return ship, ok
 }
 
 func (s *Sdk) loadAgent() {

@@ -47,6 +47,20 @@ func (n *Navigation) PlotRoute(systemId, origin, destination string, currentFuel
 	return path, err
 }
 
+func (n *Navigation) EstimateRouteFuelCost(systemId, origin, destination string, currentFuel int32) (int32, error) {
+	path, err := n.PlotRoute(systemId, origin, destination, currentFuel)
+	if err != nil {
+		return 0, err
+	}
+
+	costs := int32(0)
+	for i := range path {
+		costs += path[i].Fuel
+	}
+
+	return costs, nil
+}
+
 func (n *Navigation) pgrDjikstra(systemId, origin, destination string, fuelConstraint int32) ([]PathSegment, error) {
 	q := RawStatement(fmt.Sprintf(`
        SELECT id AS "PathSegment.to", cost AS "PathSegment.fuel", agg_cost AS "PathSegment.agg_cost"

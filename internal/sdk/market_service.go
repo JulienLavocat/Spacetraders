@@ -17,6 +17,7 @@ import (
 
 type Market struct {
 	db     *sql.DB
+	sdk    *Sdk
 	logger zerolog.Logger
 }
 
@@ -47,10 +48,11 @@ type TradeRoute struct {
 	FuelCost                int32
 }
 
-func NewMarket(db *sql.DB) *Market {
+func NewMarket(db *sql.DB, sdk *Sdk) *Market {
 	return &Market{
 		db:     db,
 		logger: log.With().Str("component", "Market").Logger(),
+		sdk:    sdk,
 	}
 }
 

@@ -170,7 +170,7 @@ func (m *Market) UpdateMarket(data api.Market) {
 	m.logger.Info().Msgf("updated %d products in waypoints %s", affectedRows, data.Symbol)
 }
 
-func (m *Market) GetTradeOpportunities(systemId string) any {
+func (m *Market) GetTradeRoutes(systemId string) []*TradeRoute {
 	buyQuery := WaypointsProducts.
 		INNER_JOIN(Waypoints, Waypoints.ID.EQ(WaypointsProducts.WaypointID)).
 		SELECT(
@@ -238,7 +238,7 @@ func (m *Market) GetTradeOpportunities(systemId string) any {
 	}
 
 	// TODO: Calculate fuel cost for each routes
-	var tradeRoutes []TradeRoute
+	var tradeRoutes []*TradeRoute
 	for product, buyOpportunity := range buyOpportuinities {
 		sellOpportunity, ok := sellOpportuinities[product]
 		if !ok || sellOpportunity.ID == buyOpportunity.ID {
@@ -247,7 +247,7 @@ func (m *Market) GetTradeOpportunities(systemId string) any {
 
 		maxAmount := min(buyOpportunity.Volume, sellOpportunity.Volume)
 
-		tradeRoutes = append(tradeRoutes, TradeRoute{
+		tradeRoutes = append(tradeRoutes, &TradeRoute{
 			Product:                 product,
 			SellPrice:               sellOpportunity.Price,
 			BuyPrice:                buyOpportunity.Price,
@@ -260,7 +260,7 @@ func (m *Market) GetTradeOpportunities(systemId string) any {
 		})
 	}
 
-	slices.SortFunc(tradeRoutes, func(a, b TradeRoute) int {
+	slices.SortFunc(tradeRoutes, func(a, b *TradeRoute) int {
 		return cmp.Compare(b.EstimatedProfits, a.EstimatedProfits)
 	})
 

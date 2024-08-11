@@ -2,6 +2,8 @@ package sdk
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/julienlavocat/spacetraders/internal/api"
@@ -51,37 +53,49 @@ func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 	return s
 }
 
-func (s *Ship) NavigateTo(waypoint string) *Ship {
-	s.logger.Info().Msgf("navigating from %s to %s", s.Nav.WaypointSymbol, waypoint)
-
-	if waypoint == s.Nav.WaypointSymbol {
-		s.logger.Info().Msgf("ship already at %s", waypoint)
-		return s
+func (s *Ship) NavigateTo(destination string) int32 {
+	s.logger.Info().Msgf("plotting route from %s to %s", s.Nav.WaypointSymbol, destination)
+	route, err := s.sdk.Navigation.PlotRoute(s.Nav.SystemSymbol, s.Nav.WaypointSymbol, destination, s.Fuel.Current)
+	if err != nil {
+		s.logger.Fatal().Err(err).Msg("unable to plot route")
 	}
 
-	// TODO: Ensure fuel is sufficient before navigating
-	if s.Fuel.Current <= s.refuelThreshold {
-		s.Refuel()
+	var stops []string
+	for _, nextStop := range route {
+		stops = append(stops, fmt.Sprintf("%s (%d)", nextStop.To, nextStop.Fuel))
+	}
+	s.logger.Info().Str("path", strings.Join(stops, " -> ")).Msgf("established route from %s to %s", s.Nav.WaypointSymbol, destination)
+
+	s.logger.Info().Msgf("navigating from %s to %s", s.Nav.WaypointSymbol, destination)
+
+	expanses := int32(0)
+	for _, nextStop := range route {
+		if nextStop.To == s.Nav.WaypointSymbol {
+			s.logger.Info().Msgf("ship already at %s", nextStop.To)
+			continue
+		}
+
+		expanses += s.Refuel()
+
+		s.Orbit()
+
+		res := utils.RetryRequest(
+			s.sdk.Client.FleetAPI.NavigateShip(s.ctx, s.Id).NavigateShipRequest(*api.NewNavigateShipRequest(nextStop.To)).Execute,
+			s.logger, "unable to navigate to waypoint %s", nextStop.To)
+
+		navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
+
+		s.logger.Info().
+			Str("shipId", s.Id).
+			Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
+
+		s.setNav(res.Data.Nav, false)
+		s.Fuel = res.Data.Fuel
+
+		s.logger.Info().Str("shipId", s.Id).Msgf("navigated to %s", nextStop.To)
 	}
 
-	s.Orbit()
-
-	res := utils.RetryRequest(
-		s.sdk.Client.FleetAPI.NavigateShip(s.ctx, s.Id).NavigateShipRequest(*api.NewNavigateShipRequest(waypoint)).Execute,
-		s.logger, "unable to navigate to waypoint %s", waypoint)
-
-	navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
-
-	s.logger.Info().
-		Str("shipId", s.Id).
-		Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
-
-	s.setNav(res.Data.Nav, false)
-	s.Fuel = res.Data.Fuel
-
-	s.logger.Info().Str("shipId", s.Id).Msgf("navigated to %s", waypoint)
-
-	return s
+	return expanses
 }
 
 func (s *Ship) Orbit() *Ship {
@@ -147,6 +161,7 @@ func (s *Ship) Refuel() int32 {
 
 	if !s.sdk.Waypoints.CanRefuelAt(s.Nav.WaypointSymbol) {
 		s.logger.Info().Msgf("can't refuel at %s", s.Nav.WaypointSymbol)
+		return 0
 	}
 
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.RefuelShip(s.ctx, s.Id).RefuelShipRequest(*api.NewRefuelShipRequest()).Execute, s.logger, "unable to refuel ship")
@@ -202,7 +217,8 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 		amount := min(amountInCargo, term.UnitsRequired-term.UnitsFulfilled)
 		product := term.TradeSymbol
 
-		s.NavigateTo(term.DestinationSymbol).Dock()
+		s.NavigateTo(term.DestinationSymbol)
+		s.Dock()
 
 		res := utils.RetryRequest(
 			s.sdk.Client.ContractsAPI.DeliverContract(s.ctx, contract.Id).DeliverContractRequest(*api.NewDeliverContractRequest(s.Id, product, amount)).Execute,
@@ -247,6 +263,34 @@ func (s *Ship) TransferPartialCargo(shipId string, maxAmount int32) {
 func (s *Ship) RefreshCargo() {
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.GetMyShipCargo(s.ctx, s.Id).Execute, s.logger, "unable to refresh cargo")
 	s.setCargo(res.Data)
+}
+
+func (s *Ship) Buy(product string, amount int32) (int32, error) {
+	res, errBody, err := utils.RetryRequestWithoutFatal(s.sdk.Client.FleetAPI.PurchaseCargo(s.ctx, s.Id).PurchaseCargoRequest(*api.NewPurchaseCargoRequest(api.TradeSymbol(product), amount)).Execute, s.logger)
+	if err != nil {
+		s.logger.Err(err).Interface("body", errBody).Msgf("unable to buy goods at %s", s.Nav.WaypointSymbol)
+		return 0, err
+	}
+	s.setCargo(res.Data.Cargo)
+
+	tx := res.Data.Transaction
+	s.logger.Info().Msgf("bought %d %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
+
+	return res.Data.Transaction.TotalPrice, nil
+}
+
+func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
+	revenue := int32(0)
+	expanses := int32(0)
+
+	expanses += s.NavigateTo(route.BuyAt)
+	txRevenue, err := s.Buy(route.Product, min(s.MaxCargo-s.CurrentCargo, route.MaxAmount))
+	revenue += txRevenue
+	if err != nil {
+		return revenue, expanses, err
+	}
+
+	return revenue, expanses, nil
 }
 
 func (s *Ship) GetSnapshot() ShipSnapshot {

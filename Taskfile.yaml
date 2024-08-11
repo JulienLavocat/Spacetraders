@@ -3,7 +3,7 @@ version: '3'
 tasks:
   openapi: ./scripts/generate_client.sh
   start: go run cmd/spacetraders/main.go
-  init: go run cmd/init/main.go 
-  jet: jet -dsn="postgresql://spacetraders@localhost:5432/spacetraders?sslmode=disable" -schema=public -path=./.gen
+  init: go run cmd/init/*.go
+  jet: jet -dsn="postgresql://spacetraders:spacetraders@localhost:5432/spacetraders?sslmode=disable" -schema=public -path=./.gen -ignore-tables=spatial_ref_sys
   test: go test ./...
 

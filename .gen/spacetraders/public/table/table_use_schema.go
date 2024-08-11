@@ -19,6 +19,7 @@ func UseSchema(schema string) {
 	Systems = Systems.FromSchema(schema)
 	Traits = Traits.FromSchema(schema)
 	Waypoints = Waypoints.FromSchema(schema)
+	WaypointsGraphs = WaypointsGraphs.FromSchema(schema)
 	WaypointsModifiers = WaypointsModifiers.FromSchema(schema)
 	WaypointsProducts = WaypointsProducts.FromSchema(schema)
 	WaypointsTraits = WaypointsTraits.FromSchema(schema)

@@ -2,78 +2,73 @@ package sdk
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 
 	. "github.com/go-jet/jet/v2/postgres"
-	"github.com/julienlavocat/spacetraders/.gen/spacetraders/public/model"
-	. "github.com/julienlavocat/spacetraders/.gen/spacetraders/public/table"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gonum.org/v1/gonum/graph/encoding/dot"
-	"gonum.org/v1/gonum/graph/simple"
 )
-
-type SystemMap struct {
-	graph           *simple.WeightedUndirectedGraph
-	waypointsToNode map[string]int64
-}
 
 type Navigation struct {
 	db     *sql.DB
-	charts map[string]*SystemMap
 	logger zerolog.Logger
+}
+
+type PathSegment struct {
+	To      string
+	Fuel    int32
+	AggCost int32
 }
 
 func NewNavigation(db *sql.DB) *Navigation {
 	return &Navigation{
 		db:     db,
-		charts: make(map[string]*SystemMap),
 		logger: log.With().Str("component", "Navigation").Logger(),
 	}
 }
 
-func newSystemMap(waypoints []model.Waypoints) *SystemMap {
-	graph := simple.NewWeightedUndirectedGraph(0, 15)
-	waypointsToIds := make(map[string]int64)
-
-	for id, waypoint := range waypoints {
-		graph.AddNode(simple.Node(int64(id)))
-		waypointsToIds[waypoint.ID] = int64(id)
+// Plot a route between two waypoints in a system. Navigation is guaranteed to go through a network of fuel stations (so it can safely be refueled) except for the first and last waypoints
+func (n *Navigation) PlotRoute(systemId, origin, destination string, currentFuel int32) ([]PathSegment, error) {
+	// TODO: Run a first path from origin -> destination using fuelConstraint, (effectively placing the ship on the network on the first step)
+	// then, do another run from the first station of the network to the destination using the ship's MAX FUEL
+	// the path returned will be: origin -> first station from first run -> second run)
+	// If no path can't be found at the first run (to join the stations networks), drift to the nearest one
+	// If not path can't be found for the next stops, get as close as possible and also drift until there
+	path, err := n.pgrDjikstra(systemId, origin, destination, currentFuel)
+	if err != nil {
+		return nil, err
 	}
 
-	for id1, w1 := range waypoints {
-		for id2, w2 := range waypoints {
-			if w1.ID == w2.ID {
-				continue
-			}
-
-			fuelCost := GetFuelCost(w1.X, w1.Y, w2.X, w2.Y)
-			graph.SetWeightedEdge(graph.NewWeightedEdge(simple.Node(id1), simple.Node(id2), float64(fuelCost)))
-		}
+	if len(path) == 0 && destination != origin {
+		return nil, errors.New("no route found")
 	}
 
-	return &SystemMap{
-		graph:           graph,
-		waypointsToNode: waypointsToIds,
-	}
+	return path, err
 }
 
-func (n *Navigation) GetGraphViz(system string) string {
-	systemMap, ok := n.charts[system]
-	if !ok {
-		var waypoints []model.Waypoints
-		err := Waypoints.SELECT(Waypoints.ID, Waypoints.X, Waypoints.Y).WHERE(Waypoints.SystemID.EQ(String(system))).Query(n.db, &waypoints)
-		if err != nil {
-			n.logger.Fatal().Err(err).Msgf("unable to query waypoints in system %s", system)
-		}
+func (n *Navigation) pgrDjikstra(systemId, origin, destination string, fuelConstraint int32) ([]PathSegment, error) {
+	q := RawStatement(fmt.Sprintf(`
+       SELECT id AS "PathSegment.to", cost AS "PathSegment.fuel", agg_cost AS "PathSegment.agg_cost"
+FROM pgr_dijkstra('
+       SELECT wg.id, source, target, cost, product_id
+FROM waypoints_graphs wg
+         INNER JOIN waypoints w ON w.gid = wg.source
+         FULL JOIN waypoints_products wp on w.id = wp.waypoint_id
+WHERE w.system_id = ''%[1]s''
+  AND cost <= %[2]d
+  AND (wp.product_id = ''FUEL'' OR w.id = ''%[3]s'' OR w.id = ''%[4]s'');',
+                  (SELECT gid FROM waypoints WHERE id = '%[3]s'),
+                  (SELECT gid FROM waypoints WHERE id = '%[4]s'))
+         INNER JOIN waypoints ON gid = node
+ORDER BY path_seq`, systemId, fuelConstraint, origin, destination))
 
-		systemMap = newSystemMap(waypoints)
-		n.charts[system] = systemMap
-	}
-
-	dotViz, err := dot.Marshal(systemMap.graph, "X1-QA42", "", "")
+	var results []PathSegment
+	err := q.Query(n.db, &results)
 	if err != nil {
-		n.logger.Fatal().Err(err).Msgf("unable to generate dotviz for system %s", system)
+		n.logger.Err(err).Msgf("unable to run djikstra algorithm in %s from %s to %s and fuel constraint %d", systemId, origin, destination, fuelConstraint)
+		return nil, err
 	}
 
-	return string(dotViz)
+	return results, nil
 }

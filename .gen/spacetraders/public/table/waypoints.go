@@ -27,6 +27,8 @@ type waypointsTable struct {
 	UnderConstruction postgres.ColumnBool
 	SubmittedOn       postgres.ColumnTimestampz
 	SubmittedBy       postgres.ColumnString
+	Gid               postgres.ColumnInteger
+	Geom              postgres.ColumnString
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -77,8 +79,10 @@ func newWaypointsTableImpl(schemaName, tableName, alias string) waypointsTable {
 		UnderConstructionColumn = postgres.BoolColumn("under_construction")
 		SubmittedOnColumn       = postgres.TimestampzColumn("submitted_on")
 		SubmittedByColumn       = postgres.StringColumn("submitted_by")
-		allColumns              = postgres.ColumnList{IDColumn, SystemIDColumn, XColumn, YColumn, TypeColumn, FactionColumn, OrbitsColumn, UnderConstructionColumn, SubmittedOnColumn, SubmittedByColumn}
-		mutableColumns          = postgres.ColumnList{SystemIDColumn, XColumn, YColumn, TypeColumn, FactionColumn, OrbitsColumn, UnderConstructionColumn, SubmittedOnColumn, SubmittedByColumn}
+		GidColumn               = postgres.IntegerColumn("gid")
+		GeomColumn              = postgres.StringColumn("geom")
+		allColumns              = postgres.ColumnList{IDColumn, SystemIDColumn, XColumn, YColumn, TypeColumn, FactionColumn, OrbitsColumn, UnderConstructionColumn, SubmittedOnColumn, SubmittedByColumn, GidColumn, GeomColumn}
+		mutableColumns          = postgres.ColumnList{SystemIDColumn, XColumn, YColumn, TypeColumn, FactionColumn, OrbitsColumn, UnderConstructionColumn, SubmittedOnColumn, SubmittedByColumn, GidColumn, GeomColumn}
 	)
 
 	return waypointsTable{
@@ -95,6 +99,8 @@ func newWaypointsTableImpl(schemaName, tableName, alias string) waypointsTable {
 		UnderConstruction: UnderConstructionColumn,
 		SubmittedOn:       SubmittedOnColumn,
 		SubmittedBy:       SubmittedByColumn,
+		Gid:               GidColumn,
+		Geom:              GeomColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

@@ -26,7 +26,7 @@ type Sdk struct {
 func NewSdk() *Sdk {
 	logger := log.With().Str("component", "SDK").Logger()
 
-	db, err := sql.Open("postgres", "postgresql://spacetraders@localhost:5432/spacetraders?sslmode=disable")
+	db, err := sql.Open("postgres", "postgresql://spacetraders:spacetraders@localhost:5432/spacetraders?sslmode=disable")
 	if err != nil {
 		logger.Fatal().Err(err).Msg("database connection failed")
 	}
@@ -53,6 +53,10 @@ func (s *Sdk) Init() {
 	s.loadAgent()
 	s.loadShips()
 	s.Ready = true
+}
+
+func (s *Sdk) GetShip(id string) *Ship {
+	return s.Ships[id]
 }
 
 func (s *Sdk) loadAgent() {

@@ -2,58 +2,59 @@ name: spacetraders
 
 services:
   postgresql:
-    image: bitnami/postgresql:15
+    image: kartoza/postgis:16-3.4
     volumes:
-      - postgresql-data:/bitnami/postgresql
+      - postgresql-data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - 5432:5432
     environment:
-      POSTGRESQL_DATABASE: spacetraders
-      POSTGRESQL_USERNAME: spacetraders
-      ALLOW_EMPTY_PASSWORD: yes
-  loki:
-    image: grafana/loki:2.9.2
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./docker/loki.yaml:/etc/loki/local-config.yaml
-    command: -config.file=/etc/loki/local-config.yaml
-
-  promtail:
-    image: grafana/promtail:2.9.2
-    volumes:
-      - ./docker/promtail.yml:/etc/promtail/config.yml
-      - ./logs.txt:/opt/spacetraders/logs.txt
-    command: -config.file=/etc/promtail/config.yml
-
-  grafana:
-    environment:
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    entrypoint:
-      - sh
-      - -euc
-      - |
-        mkdir -p /etc/grafana/provisioning/datasources
-        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
-        apiVersion: 1
-        datasources:
-        - name: Loki
-          type: loki
-          access: proxy 
-          orgId: 1
-          url: http://loki:3100
-          basicAuth: false
-          isDefault: true
-          version: 1
-          editable: false
-        EOF
-        /run.sh
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
+      ALLOW_IP_RANGE: 0.0.0.0/0
+      POSTGRES_DB: spacetraders
+      POSTGRES_USER: spacetraders
+      POSTGRES_PASS: spacetraders
+  # loki:
+  #   image: grafana/loki:2.9.2
+  #   ports:
+  #     - "3100:3100"
+  #   volumes:
+  #     - ./docker/loki.yaml:/etc/loki/local-config.yaml
+  #   command: -config.file=/etc/loki/local-config.yaml
+  #
+  # promtail:
+  #   image: grafana/promtail:2.9.2
+  #   volumes:
+  #     - ./docker/promtail.yml:/etc/promtail/config.yml
+  #     - ./logs.txt:/opt/spacetraders/logs.txt
+  #   command: -config.file=/etc/promtail/config.yml
+  #
+  # grafana:
+  #   environment:
+  #     - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+  #     - GF_AUTH_ANONYMOUS_ENABLED=true
+  #     - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+  #   entrypoint:
+  #     - sh
+  #     - -euc
+  #     - |
+  #       mkdir -p /etc/grafana/provisioning/datasources
+  #       cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+  #       apiVersion: 1
+  #       datasources:
+  #       - name: Loki
+  #         type: loki
+  #         access: proxy 
+  #         orgId: 1
+  #         url: http://loki:3100
+  #         basicAuth: false
+  #         isDefault: true
+  #         version: 1
+  #         editable: false
+  #       EOF
+  #       /run.sh
+  #   image: grafana/grafana:latest
+  #   ports:
+  #     - "3000:3000"
 
 volumes:
   postgresql-data:

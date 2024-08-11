@@ -57,10 +57,10 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 
 	router.GET("/market/:systemId", func(c *gin.Context) {
 		systemId := c.Param("systemId")
-		c.JSON(200, s.Market.GetTradeOpportunities(systemId))
+		c.JSON(200, s.Market.GetTradeRoutes(systemId))
 	})
 
-	if err := router.Run(); err != nil {
+	if err := router.Run("0.0.0.0:8081"); err != nil {
 		log.Fatal().Err(err).Msg("unable to start API")
 	}
 }

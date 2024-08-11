@@ -22,6 +22,8 @@ type systemsTable struct {
 	Type     postgres.ColumnString
 	X        postgres.ColumnInteger
 	Y        postgres.ColumnInteger
+	Gid      postgres.ColumnInteger
+	Geom     postgres.ColumnString
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -67,8 +69,10 @@ func newSystemsTableImpl(schemaName, tableName, alias string) systemsTable {
 		TypeColumn     = postgres.StringColumn("type")
 		XColumn        = postgres.IntegerColumn("x")
 		YColumn        = postgres.IntegerColumn("y")
-		allColumns     = postgres.ColumnList{IDColumn, SectorIDColumn, TypeColumn, XColumn, YColumn}
-		mutableColumns = postgres.ColumnList{SectorIDColumn, TypeColumn, XColumn, YColumn}
+		GidColumn      = postgres.IntegerColumn("gid")
+		GeomColumn     = postgres.StringColumn("geom")
+		allColumns     = postgres.ColumnList{IDColumn, SectorIDColumn, TypeColumn, XColumn, YColumn, GidColumn, GeomColumn}
+		mutableColumns = postgres.ColumnList{SectorIDColumn, TypeColumn, XColumn, YColumn, GidColumn, GeomColumn}
 	)
 
 	return systemsTable{
@@ -80,6 +84,8 @@ func newSystemsTableImpl(schemaName, tableName, alias string) systemsTable {
 		Type:     TypeColumn,
 		X:        XColumn,
 		Y:        YColumn,
+		Gid:      GidColumn,
+		Geom:     GeomColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

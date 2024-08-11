@@ -9,6 +9,7 @@ CREATE TABLE "waypoints" (
 	"under_construction" BOOLEAN NOT NULL,
 	"submitted_on" TIMESTAMPTZ,
 	"submitted_by" VARCHAR,
+	"gid" SERIAL NOT NULL UNIQUE DEFAULT nextval('waypoints_gid_seq'),
 	PRIMARY KEY("id")
 );
 
@@ -58,6 +59,7 @@ CREATE TABLE "systems" (
 	"type" VARCHAR NOT NULL,
 	"x" INTEGER NOT NULL,
 	"y" INTEGER NOT NULL,
+	"gid" SERIAL NOT NULL UNIQUE DEFAULT nextval('waypoints_gid_seq'),
 	PRIMARY KEY("id")
 );
 
@@ -95,6 +97,35 @@ CREATE TABLE "waypoints_modifiers" (
 );
 
 
+CREATE TABLE "market_probes" (
+	"ship" VARCHAR,
+	"waypoint" VARCHAR,
+	"system" VARCHAR NOT NULL,
+	PRIMARY KEY("ship", "waypoint")
+);
+
+
+CREATE TABLE "waypoints_graphs" (
+	"id" SERIAL NOT NULL UNIQUE,
+	"source" SERIAL NOT NULL,
+	"target" SERIAL NOT NULL,
+	"cost" INTEGER NOT NULL,
+	"system_id" VARCHAR NOT NULL,
+	PRIMARY KEY("id")
+);
+
+CREATE INDEX "waypoints_graphs_index_0"
+ON "waypoints_graphs" ("system_id");
+
+CREATE INDEX "waypoints_graphs_index_1"
+ON "waypoints_graphs" ("cost");
+
+CREATE INDEX "waypoints_graphs_index_2"
+ON "waypoints_graphs" ("source");
+
+CREATE INDEX "waypoints_graphs_index_3"
+ON "waypoints_graphs" ("target");
+
 ALTER TABLE "factions_systems"
 ADD FOREIGN KEY("faction_id") REFERENCES "factions"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
@@ -128,3 +159,12 @@ ON UPDATE NO ACTION ON DELETE NO ACTION;
 ALTER TABLE "waypoints"
 ADD FOREIGN KEY("system_id") REFERENCES "systems"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
+ALTER TABLE "waypoints_graphs"
+ADD FOREIGN KEY("system_id") REFERENCES "systems"("id")
+ON UPDATE NO ACTION ON DELETE NO ACTION;
+ALTER TABLE "waypoints_graphs"
+ADD FOREIGN KEY("source") REFERENCES "waypoints"("gid")
+ON UPDATE NO ACTION ON DELETE NO ACTION;
+ALTER TABLE "waypoints_graphs"
+ADD FOREIGN KEY("target") REFERENCES "waypoints"("gid")
+ON UPDATE NO ACTION ON DELETE NO ACTION;

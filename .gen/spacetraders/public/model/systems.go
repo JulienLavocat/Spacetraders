@@ -13,4 +13,6 @@ type Systems struct {
 	Type     string
 	X        int32
 	Y        int32
+	Gid      int32
+	Geom     string
 }

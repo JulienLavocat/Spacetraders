@@ -22,9 +22,14 @@ func main() {
 
 	s.Init()
 
-	go createMiningFleet(s, restApi)
-	go createMarketProbesFleet(s)
+	ship := s.GetShip("JLVC-1")
 
+	ship.NavigateTo("X1-NT44-A2")
+
+	// go createMiningFleet(s, restApi)
+	// go createMarketProbesFleet(s)
+	// go createTradeFleet(s)
+	//
 	// This allow the service to run forever
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -45,6 +50,11 @@ func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
 	if err := miningFleet.BeginOperations("X1-QA42"); err != nil {
 		log.Fatal().Err(err).Msg("unable to begin operations for fleet MNG_1")
 	}
+}
+
+func createTradeFleet(s *sdk.Sdk) {
+	fleet := ai.NewTradingFleet(s, "TRD_1", "X1-QA42", []string{"JLVC-A"})
+	fleet.BeginOperations()
 }
 
 func setupLogger() {

@@ -33,6 +33,42 @@ func RetryRequest[T any](execute func() (*T, *http.Response, error), logger zero
 	return nil
 }
 
+func RetryRequestWithoutFatal[T any](execute func() (*T, *http.Response, error), logger zerolog.Logger) (*T, map[string]any, error) {
+	for i := 0; i < MAX_RETRY; i++ {
+		res, response, err := execute()
+
+		if response.StatusCode == 429 {
+			resetAt, err := time.Parse(time.RFC3339, response.Header.Get("x-ratelimit-reset"))
+			if err != nil {
+				logger.Fatal().Msgf("unable to parse rate limit date: %s", response.Header.Get("x-ratelimit-reset"))
+			}
+
+			sleepFor := resetAt.Add(time.Second).Sub(time.Now().UTC())
+
+			logger.Info().Msgf("hitting rate limit, resets at %s (sleeping for %.2f)", resetAt, sleepFor.Seconds())
+			time.Sleep(sleepFor)
+			continue
+		}
+
+		if err != nil {
+			isJson, json, body, err := readJsonFromBody(response)
+			if err != nil {
+				return nil, nil, errors.New("unable to read response body")
+			}
+
+			if isJson {
+				return nil, json, err
+			} else {
+				return nil, map[string]any{"text": body}, err
+			}
+		}
+
+		return res, nil, nil
+	}
+
+	return nil, nil, errors.New("max retry exceeded")
+}
+
 func fatalIfHttpError(res *http.Response, err error, logger zerolog.Logger, msg string, args ...interface{}) {
 	if err == nil {
 		return

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math"
 	"os"
 	"time"
@@ -24,19 +25,21 @@ const (
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
-	db, err := sql.Open("postgres", "postgresql://spacetraders@localhost:5432/spacetraders?sslmode=disable")
+	db, err := sql.Open("postgres", "postgresql://spacetraders:spacetraders@localhost:5432/spacetraders?sslmode=disable")
 	if err != nil {
 		log.Fatal().Err(err).Msg("database connection failed")
 	}
 	defer db.Close()
 
-	insertTraits(db)
-	insertProducts(db)
-	insertFactions(db)
-	insertModifiers(db)
+	// insertTraits(db)
+	// insertProducts(db)
+	// insertFactions(db)
+	// insertModifiers(db)
+	//
+	// insertSystems(db)
+	// insertWaypoints(db)
 
-	insertSystems(db)
-	insertWaypoints(db)
+	initWaypointsGraph(db)
 }
 
 func insertSystems(db *sql.DB) {
@@ -47,7 +50,7 @@ func insertSystems(db *sql.DB) {
 	for page < maxPage {
 		log.Info().Msgf("fetching page %d/%d, systems", page, maxPage)
 
-		insertSystems := Systems.INSERT(Systems.AllColumns).ON_CONFLICT(Systems.ID).DO_NOTHING()
+		insertSystems := Systems.INSERT(Systems.AllColumns.Except(Systems.Gid)).ON_CONFLICT(Systems.ID).DO_NOTHING()
 		insertFactionsSystems := FactionsSystems.INSERT(FactionsSystems.AllColumns).ON_CONFLICT(FactionsSystems.AllColumns...).DO_NOTHING()
 
 		res := utils.RetryRequest(client.SystemsAPI.GetSystems(context.Background()).Page(int32(page)).Limit(20).Execute, log.Logger, "failed to fetch systems at page %d", page)
@@ -67,6 +70,7 @@ func insertSystems(db *sql.DB) {
 				Type:     string(system.Type),
 				X:        system.X,
 				Y:        system.Y,
+				Geom:     fmt.Sprintf("POINT(%d %d)", system.X, system.Y),
 			})
 
 			for _, sf := range system.Factions {
@@ -107,12 +111,16 @@ func insertWaypoints(db *sql.DB) {
 
 	for i, system := range systems {
 		log.Info().Msgf("fetching system %s %d/%d", system.ID, i, len(systems))
+		if system.ID != "X1-NT44" {
+			continue
+		}
+
 		insertSystemWaypoints(client, db, system)
 	}
 }
 
 func insertSystemWaypoints(client *api.APIClient, db *sql.DB, system model.Systems) {
-	insertWaypoint := Waypoints.INSERT(Waypoints.AllColumns).ON_CONFLICT(Waypoints.ID).DO_NOTHING()
+	insertWaypoint := Waypoints.INSERT(Waypoints.AllColumns.Except(Waypoints.Gid)).ON_CONFLICT(Waypoints.ID).DO_NOTHING()
 	insertWaypointTraits := WaypointsTraits.INSERT(WaypointsTraits.AllColumns).ON_CONFLICT(WaypointsTraits.AllColumns...).DO_NOTHING()
 	insertWaypointModifiers := WaypointsModifiers.INSERT(WaypointsModifiers.AllColumns).ON_CONFLICT(WaypointsModifiers.AllColumns...).DO_NOTHING()
 	insertWaypointsProducts := WaypointsProducts.INSERT(WaypointsProducts.AllColumns).ON_CONFLICT(WaypointsProducts.WaypointID, WaypointsProducts.ProductID, WaypointsProducts.Export, WaypointsProducts.Import, WaypointsProducts.Exchange).DO_NOTHING()
@@ -135,6 +143,7 @@ func insertSystemWaypoints(client *api.APIClient, db *sql.DB, system model.Syste
 		page++
 
 		for _, waypoint := range res.Data {
+			log.Print(fmt.Sprintf("POINT(%d %d)", waypoint.X, waypoint.Y))
 			waypointModel := model.Waypoints{
 				ID:                waypoint.Symbol,
 				Type:              string(waypoint.Type),
@@ -143,6 +152,7 @@ func insertSystemWaypoints(client *api.APIClient, db *sql.DB, system model.Syste
 				SystemID:          waypoint.SystemSymbol,
 				Orbits:            waypoint.Orbits,
 				UnderConstruction: waypoint.IsUnderConstruction,
+				Geom:              fmt.Sprintf("POINT(%d %d)", waypoint.X, waypoint.Y),
 			}
 
 			if waypoint.Faction != nil {

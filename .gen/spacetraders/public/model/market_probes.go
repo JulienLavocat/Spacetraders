@@ -11,4 +11,5 @@ type MarketProbes struct {
 	Ship     string `sql:"primary_key"`
 	Waypoint string `sql:"primary_key"`
 	System   string
+	Shipyard bool
 }

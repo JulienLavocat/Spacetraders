@@ -22,6 +22,6 @@ type Waypoints struct {
 	UnderConstruction bool
 	SubmittedOn       *time.Time
 	SubmittedBy       *string
-	Gid               int32
 	Geom              string
+	Gid               int32
 }

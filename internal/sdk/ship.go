@@ -152,6 +152,10 @@ func (s *Ship) Sell(plan []SellPlan) (int32, int32) {
 
 			s.setCargo(res.Data.Cargo)
 
+			if err := s.sdk.Market.ReportTransaction(res.Data.Transaction, res.Data.Agent.Credits); err != nil {
+				s.logger.Error().Err(err).Interface("transation", res.Data.Transaction).Interface("agent", res.Data.Agent).Msgf("unable to report transation")
+			}
+
 			tx := res.Data.Transaction
 			revenue += tx.TotalPrice
 			s.logger.Info().Msgf("sold %d %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
@@ -299,6 +303,10 @@ func (s *Ship) Buy(product string, amount int32) (int32, error) {
 	if err != nil || errBody != nil {
 		s.logger.Err(err).Interface("body", errBody).Msgf("unable to buy goods at %s", s.Nav.WaypointSymbol)
 		return 0, err
+	}
+
+	if err := s.sdk.Market.ReportTransaction(res.Data.Transaction, res.Data.Agent.Credits); err != nil {
+		s.logger.Error().Err(err).Interface("transation", res.Data.Transaction).Interface("agent", res.Data.Agent).Msgf("unable to report transation")
 	}
 
 	s.setCargo(res.Data.Cargo)

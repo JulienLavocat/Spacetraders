@@ -20,6 +20,7 @@ type marketProbesTable struct {
 	Ship     postgres.ColumnString
 	Waypoint postgres.ColumnString
 	System   postgres.ColumnString
+	Shipyard postgres.ColumnBool
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -63,8 +64,9 @@ func newMarketProbesTableImpl(schemaName, tableName, alias string) marketProbesT
 		ShipColumn     = postgres.StringColumn("ship")
 		WaypointColumn = postgres.StringColumn("waypoint")
 		SystemColumn   = postgres.StringColumn("system")
-		allColumns     = postgres.ColumnList{ShipColumn, WaypointColumn, SystemColumn}
-		mutableColumns = postgres.ColumnList{SystemColumn}
+		ShipyardColumn = postgres.BoolColumn("shipyard")
+		allColumns     = postgres.ColumnList{ShipColumn, WaypointColumn, SystemColumn, ShipyardColumn}
+		mutableColumns = postgres.ColumnList{SystemColumn, ShipyardColumn}
 	)
 
 	return marketProbesTable{
@@ -74,6 +76,7 @@ func newMarketProbesTableImpl(schemaName, tableName, alias string) marketProbesT
 		Ship:     ShipColumn,
 		Waypoint: WaypointColumn,
 		System:   SystemColumn,
+		Shipyard: ShipyardColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

@@ -170,7 +170,7 @@ func (m *MiningFleetCommander) performHaulingOperation() {
 func (m *MiningFleetCommander) sellHaulerCargo() {
 	m.shipStates[m.hauler.Id] = "SELLING"
 	m.sellPlan = m.s.Market.CreateSellPlan(m.systemId, m.hauler.Cargo)
-	revenue, expanses := m.hauler.Sell(m.sellPlan)
+	revenue, expanses := m.hauler.Sell(m.sellPlan, m.Id)
 	expanses += m.hauler.Refuel()
 	m.hauler.NavigateTo(m.target)
 	m.shipStates[m.hauler.Id] = "IDLE"

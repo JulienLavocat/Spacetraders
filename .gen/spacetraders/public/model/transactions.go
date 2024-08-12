@@ -12,14 +12,15 @@ import (
 )
 
 type Transactions struct {
-	ID           int32 `sql:"primary_key"`
-	Waypoint     string
-	Product      string
-	Amount       int32
-	Type         string
-	Ship         string
-	PricePerUnit int32
-	TotalPrice   int32
-	Timestamp    time.Time
-	AgentBalance int64
+	ID            int32 `sql:"primary_key"`
+	Waypoint      string
+	Product       string
+	Amount        int32
+	Type          string
+	Ship          string
+	PricePerUnit  int32
+	TotalPrice    int32
+	Timestamp     time.Time
+	AgentBalance  int64
+	CorrelationID *string
 }

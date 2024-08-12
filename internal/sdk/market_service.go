@@ -342,16 +342,17 @@ func (m *Market) FindLowestProductPrice(systemId, product string) (bool, string,
 	return result.Id != "", result.Id, result.Price, nil
 }
 
-func (m *Market) ReportTransaction(tx api.MarketTransaction, balance int64) error {
+func (m *Market) ReportTransaction(tx api.MarketTransaction, balance int64, correlationId string) error {
 	_, err := Transactions.INSERT(Transactions.AllColumns.Except(Transactions.ID, Transactions.Timestamp)).MODEL(model.Transactions{
-		Waypoint:     tx.WaypointSymbol,
-		Ship:         tx.ShipSymbol,
-		Product:      tx.TradeSymbol,
-		Type:         tx.Type,
-		Amount:       tx.Units,
-		TotalPrice:   tx.TotalPrice,
-		PricePerUnit: tx.PricePerUnit,
-		AgentBalance: balance,
+		Waypoint:      tx.WaypointSymbol,
+		Ship:          tx.ShipSymbol,
+		Product:       tx.TradeSymbol,
+		Type:          tx.Type,
+		Amount:        tx.Units,
+		TotalPrice:    tx.TotalPrice,
+		PricePerUnit:  tx.PricePerUnit,
+		AgentBalance:  balance,
+		CorrelationID: &correlationId,
 	}).Exec(m.db)
 
 	return err

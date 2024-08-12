@@ -17,16 +17,17 @@ type transactionsTable struct {
 	postgres.Table
 
 	// Columns
-	ID           postgres.ColumnInteger
-	Waypoint     postgres.ColumnString
-	Product      postgres.ColumnString
-	Amount       postgres.ColumnInteger
-	Type         postgres.ColumnString
-	Ship         postgres.ColumnString
-	PricePerUnit postgres.ColumnInteger
-	TotalPrice   postgres.ColumnInteger
-	Timestamp    postgres.ColumnTimestampz
-	AgentBalance postgres.ColumnInteger
+	ID            postgres.ColumnInteger
+	Waypoint      postgres.ColumnString
+	Product       postgres.ColumnString
+	Amount        postgres.ColumnInteger
+	Type          postgres.ColumnString
+	Ship          postgres.ColumnString
+	PricePerUnit  postgres.ColumnInteger
+	TotalPrice    postgres.ColumnInteger
+	Timestamp     postgres.ColumnTimestampz
+	AgentBalance  postgres.ColumnInteger
+	CorrelationID postgres.ColumnString
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -67,34 +68,36 @@ func newTransactionsTable(schemaName, tableName, alias string) *TransactionsTabl
 
 func newTransactionsTableImpl(schemaName, tableName, alias string) transactionsTable {
 	var (
-		IDColumn           = postgres.IntegerColumn("id")
-		WaypointColumn     = postgres.StringColumn("waypoint")
-		ProductColumn      = postgres.StringColumn("product")
-		AmountColumn       = postgres.IntegerColumn("amount")
-		TypeColumn         = postgres.StringColumn("type")
-		ShipColumn         = postgres.StringColumn("ship")
-		PricePerUnitColumn = postgres.IntegerColumn("price_per_unit")
-		TotalPriceColumn   = postgres.IntegerColumn("total_price")
-		TimestampColumn    = postgres.TimestampzColumn("timestamp")
-		AgentBalanceColumn = postgres.IntegerColumn("agent_balance")
-		allColumns         = postgres.ColumnList{IDColumn, WaypointColumn, ProductColumn, AmountColumn, TypeColumn, ShipColumn, PricePerUnitColumn, TotalPriceColumn, TimestampColumn, AgentBalanceColumn}
-		mutableColumns     = postgres.ColumnList{WaypointColumn, ProductColumn, AmountColumn, TypeColumn, ShipColumn, PricePerUnitColumn, TotalPriceColumn, TimestampColumn, AgentBalanceColumn}
+		IDColumn            = postgres.IntegerColumn("id")
+		WaypointColumn      = postgres.StringColumn("waypoint")
+		ProductColumn       = postgres.StringColumn("product")
+		AmountColumn        = postgres.IntegerColumn("amount")
+		TypeColumn          = postgres.StringColumn("type")
+		ShipColumn          = postgres.StringColumn("ship")
+		PricePerUnitColumn  = postgres.IntegerColumn("price_per_unit")
+		TotalPriceColumn    = postgres.IntegerColumn("total_price")
+		TimestampColumn     = postgres.TimestampzColumn("timestamp")
+		AgentBalanceColumn  = postgres.IntegerColumn("agent_balance")
+		CorrelationIDColumn = postgres.StringColumn("correlation_id")
+		allColumns          = postgres.ColumnList{IDColumn, WaypointColumn, ProductColumn, AmountColumn, TypeColumn, ShipColumn, PricePerUnitColumn, TotalPriceColumn, TimestampColumn, AgentBalanceColumn, CorrelationIDColumn}
+		mutableColumns      = postgres.ColumnList{WaypointColumn, ProductColumn, AmountColumn, TypeColumn, ShipColumn, PricePerUnitColumn, TotalPriceColumn, TimestampColumn, AgentBalanceColumn, CorrelationIDColumn}
 	)
 
 	return transactionsTable{
 		Table: postgres.NewTable(schemaName, tableName, alias, allColumns...),
 
 		//Columns
-		ID:           IDColumn,
-		Waypoint:     WaypointColumn,
-		Product:      ProductColumn,
-		Amount:       AmountColumn,
-		Type:         TypeColumn,
-		Ship:         ShipColumn,
-		PricePerUnit: PricePerUnitColumn,
-		TotalPrice:   TotalPriceColumn,
-		Timestamp:    TimestampColumn,
-		AgentBalance: AgentBalanceColumn,
+		ID:            IDColumn,
+		Waypoint:      WaypointColumn,
+		Product:       ProductColumn,
+		Amount:        AmountColumn,
+		Type:          TypeColumn,
+		Ship:          ShipColumn,
+		PricePerUnit:  PricePerUnitColumn,
+		TotalPrice:    TotalPriceColumn,
+		Timestamp:     TimestampColumn,
+		AgentBalance:  AgentBalanceColumn,
+		CorrelationID: CorrelationIDColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

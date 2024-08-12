@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/utils"
 	"github.com/rs/zerolog"
@@ -134,7 +135,7 @@ func (s *Ship) Dock() *Ship {
 	return s
 }
 
-func (s *Ship) Sell(plan []SellPlan) (int32, int32) {
+func (s *Ship) Sell(plan []SellPlan, correlationId string) (int32, int32) {
 	revenue := int32(0)
 	expanses := int32(0)
 
@@ -152,7 +153,7 @@ func (s *Ship) Sell(plan []SellPlan) (int32, int32) {
 
 			s.setCargo(res.Data.Cargo)
 
-			if err := s.sdk.Market.ReportTransaction(res.Data.Transaction, res.Data.Agent.Credits); err != nil {
+			if err := s.sdk.Market.ReportTransaction(res.Data.Transaction, res.Data.Agent.Credits, correlationId); err != nil {
 				s.logger.Error().Err(err).Interface("transation", res.Data.Transaction).Interface("agent", res.Data.Agent).Msgf("unable to report transation")
 			}
 
@@ -293,7 +294,7 @@ func (s *Ship) JettisonCargo() error {
 	return nil
 }
 
-func (s *Ship) Buy(product string, amount int32) (int32, error) {
+func (s *Ship) Buy(product string, amount int32, correlationId string) (int32, error) {
 	s.logger.Info().Msgf("attempting to buy %d %s at %s", amount, product, s.Nav.WaypointSymbol)
 	if amount == 0 {
 		s.logger.Warn().Msgf("attempt to buy 0 %s, aborting", product)
@@ -305,7 +306,7 @@ func (s *Ship) Buy(product string, amount int32) (int32, error) {
 		return 0, err
 	}
 
-	if err := s.sdk.Market.ReportTransaction(res.Data.Transaction, res.Data.Agent.Credits); err != nil {
+	if err := s.sdk.Market.ReportTransaction(res.Data.Transaction, res.Data.Agent.Credits, correlationId); err != nil {
 		s.logger.Error().Err(err).Interface("transation", res.Data.Transaction).Interface("agent", res.Data.Agent).Msgf("unable to report transation")
 	}
 
@@ -320,6 +321,7 @@ func (s *Ship) Buy(product string, amount int32) (int32, error) {
 func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 	revenue := int32(0)
 	expanses := int32(0)
+	correlationId := uuid.NewString()
 
 	amount := min(s.MaxCargo-s.CurrentCargo, route.MaxAmount)
 	expanses += s.NavigateTo(route.BuyAt)
@@ -329,7 +331,7 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 		s.logger.Warn().Interface("cargo", s.Cargo).Int64("balance", s.sdk.Balance.Load()).Msgf("unable to buy %d %s, not enough money or cargo", amount, route.Product)
 		return revenue, expanses, nil
 	}
-	txExpanses, err := s.Buy(route.Product, amount)
+	txExpanses, err := s.Buy(route.Product, amount, correlationId)
 	expanses += txExpanses
 	if err != nil {
 		return revenue, expanses, err
@@ -342,7 +344,7 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 			},
 			Location: route.SellAt,
 		},
-	})
+	}, correlationId)
 	expanses += txExpanses
 	revenue += txRevenue
 

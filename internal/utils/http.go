@@ -51,8 +51,8 @@ func RetryRequestWithoutFatal[T any](execute func() (*T, *http.Response, error),
 		}
 
 		if err != nil {
-			isJson, json, body, err := readJsonFromBody(response)
-			if err != nil {
+			isJson, json, body, bodyError := readJsonFromBody(response)
+			if bodyError != nil {
 				return nil, nil, errors.New("unable to read response body")
 			}
 

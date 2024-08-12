@@ -65,6 +65,16 @@ func (s *Sdk) GetShip(id string) (*Ship, bool) {
 	return ship, ok
 }
 
+func (s *Sdk) RefreshBalance() error {
+	res, _, err := utils.RetryRequestWithoutFatal(s.Client.AgentsAPI.GetMyAgent(context.Background()).Execute, s.logger)
+	if err != nil {
+		return err
+	}
+
+	s.Balance.Swap(res.Data.Credits)
+	return nil
+}
+
 func (s *Sdk) loadAgent() {
 	cfg := api.NewConfiguration()
 	client := api.NewAPIClient(cfg)

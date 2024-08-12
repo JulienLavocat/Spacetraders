@@ -130,6 +130,10 @@ func (m *Market) UpdateMarket(data api.Market) {
 			WaypointsProducts.UpdatedAt.SET(WaypointsProducts.EXCLUDED.UpdatedAt),
 		))
 
+	if len(data.TradeGoods) == 0 {
+		return
+	}
+
 	updateTime := time.Now().UTC()
 
 	for _, product := range data.TradeGoods {
@@ -173,6 +177,10 @@ func (m *Market) UpdateShipyard(waypoint string, data []api.ShipyardShip) {
 		))
 
 	updateTime := time.Now().UTC()
+
+	if len(data) == 0 {
+		return
+	}
 
 	for _, product := range data {
 		query.MODEL(model.WaypointsProducts{

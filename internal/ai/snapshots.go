@@ -41,13 +41,13 @@ func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
 }
 
 type TradingFleetSnapshot struct {
-	StartTime   time.Time               `json:"startTime"`
-	ShipResults map[string]*ShipResults `json:"shipResults"`
-	Id          string                  `json:"id"`
-	SystemId    string                  `json:"systemId"`
-	Ships       []string                `json:"ships"`
-	Revenue     int64                   `json:"revenue"`
-	Expanses    int64                   `json:"expanses"`
+	StartTime    time.Time                            `json:"startTime"`
+	ShipsResults map[string]TradingShipResulsSnapshot `json:"shipsResults"`
+	Id           string                               `json:"id"`
+	SystemId     string                               `json:"systemId"`
+	Ships        []string                             `json:"ships"`
+	Revenue      int64                                `json:"revenue"`
+	Expanses     int64                                `json:"expanses"`
 }
 
 func newTradingFleetSnapshot(fleet *TradingFleet) TradingFleetSnapshot {
@@ -56,13 +56,26 @@ func newTradingFleetSnapshot(fleet *TradingFleet) TradingFleetSnapshot {
 		assignedShips[i] = ship.Id
 	}
 
-	return TradingFleetSnapshot{
-		StartTime:   fleet.startTime,
-		Ships:       assignedShips,
-		Id:          fleet.Id,
-		SystemId:    fleet.systemId,
-		Revenue:     fleet.revenue.Load(),
-		Expanses:    fleet.expanses.Load(),
-		ShipResults: fleet.shipsResults,
+	shipsResults := make(map[string]TradingShipResulsSnapshot)
+	for shipId, results := range fleet.shipsResults {
+		shipsResults[shipId] = TradingShipResulsSnapshot{
+			Revenue:  results.Revenue.Load(),
+			Expanses: results.Expanses.Load(),
+		}
 	}
+
+	return TradingFleetSnapshot{
+		StartTime:    fleet.startTime,
+		Ships:        assignedShips,
+		Id:           fleet.Id,
+		SystemId:     fleet.systemId,
+		Revenue:      fleet.revenue.Load(),
+		Expanses:     fleet.expanses.Load(),
+		ShipsResults: shipsResults,
+	}
+}
+
+type TradingShipResulsSnapshot struct {
+	Revenue  int64
+	Expanses int64
 }

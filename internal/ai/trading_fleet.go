@@ -53,6 +53,8 @@ func NewTradingFleet(s *sdk.Sdk, fleetId string, systemId string, updateInterval
 		revenue:        atomic.Int64{},
 		expanses:       atomic.Int64{},
 		shipAvailables: make(chan *sdk.Ship, 100),
+		startTime:      time.Now().UTC(),
+		shipsResults:   make(map[string]*ShipResults),
 		updateInterval: updateInterval,
 	}
 }
@@ -65,6 +67,7 @@ func (t *TradingFleet) BeginOperations() {
 			t.logger.Warn().Str("ship", ship.Id).Interface("error", err).Msg("unable to jettison cargo")
 		}
 
+		t.shipsResults[ship.Id] = NewShipResults()
 		t.shipAvailables <- ship
 	}
 
@@ -88,6 +91,10 @@ func (t *TradingFleet) BeginOperations() {
 			revenue, expanses, err := ship.FollowTradeRoute(tradeRoute)
 			t.revenue.Add(int64(revenue))
 			t.expanses.Add(int64(expanses))
+
+			results := t.shipsResults[ship.Id]
+			results.Revenue.Add(int64(revenue))
+			results.Expanses.Add(int64(expanses))
 
 			if err != nil {
 				t.logger.Error().Err(err).Str("ship", ship.Id).Msgf("ship %s failed to follow trade route", ship.Id)

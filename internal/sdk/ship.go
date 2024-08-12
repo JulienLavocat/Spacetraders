@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -270,6 +271,24 @@ func (s *Ship) RefreshCargo() {
 	s.setCargo(res.Data)
 }
 
+func (s *Ship) JettisonCargo() error {
+	for product, amount := range s.Cargo {
+		res, errBody, err := utils.RetryRequestWithoutFatal(s.sdk.Client.FleetAPI.Jettison(s.ctx, s.Id).JettisonRequest(*api.NewJettisonRequest(api.TradeSymbol(product), amount)).Execute, s.logger)
+		if err != nil {
+			return err
+		}
+
+		if errBody != nil {
+			return errors.New(fmt.Sprint(errBody))
+		}
+
+		s.logger.Println(res.Data.Cargo, errBody)
+		s.setCargo(res.Data.Cargo)
+	}
+
+	return nil
+}
+
 func (s *Ship) Buy(product string, amount int32) (int32, error) {
 	s.logger.Info().Msgf("attempting to buy %d %s at %s", amount, product, s.Nav.WaypointSymbol)
 	if amount == 0 {
@@ -296,6 +315,12 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 
 	amount := min(s.MaxCargo-s.CurrentCargo, route.MaxAmount)
 	expanses += s.NavigateTo(route.BuyAt)
+	amount = min(amount, int32(s.sdk.Balance.Load()/int64(route.BuyPrice)))
+	s.logger.Debug().Msgf("buying %d %s (availableCargo: %d, volume: %d, balance: %d, buyPrice: %d)", amount, route.Product, s.MaxCargo-s.CurrentCargo, route.MaxAmount, s.sdk.Balance.Load(), route.BuyPrice)
+	if amount <= 0 {
+		s.logger.Warn().Interface("cargo", s.Cargo).Int64("balance", s.sdk.Balance.Load()).Msgf("unable to buy %d %s, not enough money or cargo", amount, route.Product)
+		return revenue, expanses, nil
+	}
 	txExpanses, err := s.Buy(route.Product, amount)
 	expanses += txExpanses
 	if err != nil {

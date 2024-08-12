@@ -1,20 +1,18 @@
 package main
 
 import (
-	"io"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/julienlavocat/spacetraders/internal/ai"
 	"github.com/julienlavocat/spacetraders/internal/rest"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
-	"github.com/rs/zerolog"
+	"github.com/julienlavocat/spacetraders/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	setupLogger()
+	utils.SetupLogger()
 	s := sdk.NewSdk()
 
 	restApi := rest.NewRestApi()
@@ -22,29 +20,13 @@ func main() {
 
 	s.Init()
 
-	// ship, _ := s.GetShip("JLVC-1")
-	// ship.Buy("SHIP_PLATING", 2)
-	// ship.NavigateTo("X1-NT44-A2")
-	// ship.Sell([]sdk.SellPlan{
-	// 	{
-	// 		ToSell:   sdk.Cargo{"SHIP_PLATING": 11},
-	// 		Location: "X1-NT44-A2",
-	// 	},
-	// })
-
 	// go createMiningFleet(s, restApi)
-	go createMarketProbesFleet(s)
-	go createTradeFleet(s)
+	go createTradeFleet(s, restApi)
 
 	// This allow the service to run forever
 	var wg sync.WaitGroup
 	wg.Add(1)
 	wg.Wait()
-}
-
-func createMarketProbesFleet(s *sdk.Sdk) {
-	probesFleet := ai.NewMarketProbesFleet(s)
-	probesFleet.BeginOperations("XI-NT44", time.Second*5)
 }
 
 func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
@@ -58,20 +40,8 @@ func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
 	}
 }
 
-func createTradeFleet(s *sdk.Sdk) {
-	fleet := ai.NewTradingFleet(s, "TRD_1", "X1-NT44", time.Minute, []string{"JLVC-1"})
+func createTradeFleet(s *sdk.Sdk, restApi *rest.RestApi) {
+	fleet := ai.NewTradingFleet(s, "TRD_1", "X1-NT44", time.Minute, []string{"JLVC-1", "JLVC-D"})
+	restApi.AddTradingFleet(fleet)
 	fleet.BeginOperations()
-}
-
-func setupLogger() {
-	writers := []io.Writer{zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}}
-	if _, ok := os.LookupEnv("PRODUCTION"); ok {
-		logFile, _ := os.OpenFile(
-			"logs.txt",
-			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666,
-		)
-		writers = append(writers, logFile)
-	}
-
-	log.Logger = zerolog.New(zerolog.MultiLevelWriter(writers...)).With().Timestamp().Logger()
 }

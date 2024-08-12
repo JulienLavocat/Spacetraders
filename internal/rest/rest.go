@@ -9,16 +9,22 @@ import (
 
 type RestApi struct {
 	miningFleets map[string]*ai.MiningFleetCommander
+	tradingFleet map[string]*ai.TradingFleet
 }
 
 func NewRestApi() *RestApi {
 	return &RestApi{
 		miningFleets: make(map[string]*ai.MiningFleetCommander),
+		tradingFleet: make(map[string]*ai.TradingFleet),
 	}
 }
 
 func (r *RestApi) AddMiningFleet(fleet *ai.MiningFleetCommander) {
 	r.miningFleets[fleet.Id] = fleet
+}
+
+func (r *RestApi) AddTradingFleet(fleet *ai.TradingFleet) {
+	r.tradingFleet[fleet.Id] = fleet
 }
 
 func (r *RestApi) StartApi(s *sdk.Sdk) {
@@ -64,6 +70,18 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 		fleetId := c.Param("fleetId")
 
 		fleet, ok := r.miningFleets[fleetId]
+		if !ok {
+			c.JSON(404, gin.H{"error": "fleet not found"})
+			return
+		}
+
+		c.JSON(200, fleet.GetSnapshot())
+	})
+
+	router.GET("/fleets/trading/:fleetId", func(c *gin.Context) {
+		fleetId := c.Param("fleetId")
+
+		fleet, ok := r.tradingFleet[fleetId]
 		if !ok {
 			c.JSON(404, gin.H{"error": "fleet not found"})
 			return

@@ -7,6 +7,7 @@ import (
 )
 
 type MiningFleetSnapshot struct {
+	StartTime  time.Time          `json:"startTime"`
 	ShipStates map[string]string  `json:"shipStates"`
 	Id         string             `json:"id"`
 	MiningAt   string             `json:"miningAt"`
@@ -15,7 +16,6 @@ type MiningFleetSnapshot struct {
 	Hauler     sdk.ShipSnapshot   `json:"hauler"`
 	Revenue    int32              `json:"revenue"`
 	Expanses   int32              `json:"expanses"`
-	StartTime  time.Time          `json:"startTime"`
 }
 
 func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
@@ -37,5 +37,32 @@ func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
 		Revenue:    fleet.revenue,
 		Expanses:   fleet.expanses,
 		StartTime:  fleet.startTime,
+	}
+}
+
+type TradingFleetSnapshot struct {
+	StartTime   time.Time               `json:"startTime"`
+	ShipResults map[string]*ShipResults `json:"shipResults"`
+	Id          string                  `json:"id"`
+	SystemId    string                  `json:"systemId"`
+	Ships       []string                `json:"ships"`
+	Revenue     int64                   `json:"revenue"`
+	Expanses    int64                   `json:"expanses"`
+}
+
+func newTradingFleetSnapshot(fleet *TradingFleet) TradingFleetSnapshot {
+	assignedShips := make([]string, len(fleet.ships))
+	for i, ship := range fleet.ships {
+		assignedShips[i] = ship.Id
+	}
+
+	return TradingFleetSnapshot{
+		StartTime:   fleet.startTime,
+		Ships:       assignedShips,
+		Id:          fleet.Id,
+		SystemId:    fleet.systemId,
+		Revenue:     fleet.revenue.Load(),
+		Expanses:    fleet.expanses.Load(),
+		ShipResults: fleet.shipsResults,
 	}
 }

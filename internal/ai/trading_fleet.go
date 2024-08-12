@@ -11,15 +11,30 @@ import (
 
 type TradingFleet struct {
 	logger                 zerolog.Logger
+	startTime              time.Time
 	lastTradeRoutesUpdates time.Time
 	s                      *sdk.Sdk
 	shipAvailables         chan *sdk.Ship
+	shipsResults           map[string]*ShipResults
 	systemId               string
-	ships                  []*sdk.Ship
+	Id                     string
 	tradeRoutes            []*sdk.TradeRoute
+	ships                  []*sdk.Ship
+	expanses               atomic.Int64
+	revenue                atomic.Int64
 	updateInterval         time.Duration
-	revenue                atomic.Int32
-	expanses               atomic.Int32
+}
+
+type ShipResults struct {
+	Revenue  atomic.Int64 `json:"revenue"`
+	Expanses atomic.Int64 `json:"expanses"`
+}
+
+func NewShipResults() *ShipResults {
+	return &ShipResults{
+		Revenue:  atomic.Int64{},
+		Expanses: atomic.Int64{},
+	}
 }
 
 // TODO: Elimintate ships paremeter to make the fleet autonomous
@@ -31,18 +46,25 @@ func NewTradingFleet(s *sdk.Sdk, fleetId string, systemId string, updateInterval
 
 	return &TradingFleet{
 		s:              s,
+		Id:             fleetId,
 		systemId:       systemId,
 		ships:          ships,
 		logger:         log.With().Str("component", "TradingFleet").Str("id", fleetId).Logger(),
-		revenue:        atomic.Int32{},
-		expanses:       atomic.Int32{},
+		revenue:        atomic.Int64{},
+		expanses:       atomic.Int64{},
 		shipAvailables: make(chan *sdk.Ship, 100),
 		updateInterval: updateInterval,
 	}
 }
 
 func (t *TradingFleet) BeginOperations() {
+	t.startTime = time.Now().UTC()
 	for _, ship := range t.ships {
+		err := ship.JettisonCargo()
+		if err != nil {
+			t.logger.Warn().Str("ship", ship.Id).Interface("error", err).Msg("unable to jettison cargo")
+		}
+
 		t.shipAvailables <- ship
 	}
 
@@ -64,8 +86,8 @@ func (t *TradingFleet) BeginOperations() {
 
 		go func() {
 			revenue, expanses, err := ship.FollowTradeRoute(tradeRoute)
-			t.revenue.Add(revenue)
-			t.expanses.Add(expanses)
+			t.revenue.Add(int64(revenue))
+			t.expanses.Add(int64(expanses))
 
 			if err != nil {
 				t.logger.Error().Err(err).Str("ship", ship.Id).Msgf("ship %s failed to follow trade route", ship.Id)
@@ -74,6 +96,10 @@ func (t *TradingFleet) BeginOperations() {
 			t.shipAvailables <- ship
 		}()
 	}
+}
+
+func (t *TradingFleet) GetSnapshot() TradingFleetSnapshot {
+	return newTradingFleetSnapshot(t)
 }
 
 func (t *TradingFleet) findTradeRoute(ship *sdk.Ship) *sdk.TradeRoute {

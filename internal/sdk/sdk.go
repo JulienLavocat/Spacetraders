@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"sync/atomic"
+	"time"
 
 	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/utils"
@@ -21,6 +23,7 @@ type Sdk struct {
 	Ships      map[string]*Ship
 	DB         *sql.DB
 	Ready      bool
+	Balance    atomic.Int64
 }
 
 func NewSdk() *Sdk {
@@ -42,6 +45,7 @@ func NewSdk() *Sdk {
 		Navigation: navigation,
 		DB:         db,
 		Ready:      false,
+		Balance:    atomic.Int64{},
 	}
 
 	sdk.loadAgent()
@@ -53,6 +57,7 @@ func (s *Sdk) Init() {
 	s.loadAgent()
 	s.loadShips()
 	s.Ready = true
+	go s.updateAgentBalance()
 }
 
 func (s *Sdk) GetShip(id string) (*Ship, bool) {
@@ -75,6 +80,7 @@ func (s *Sdk) loadAgent() {
 		s.logger.Info().Interface("agent", res.Data).Msgf("agent %s loaded", res.Data.Symbol)
 		cfg.AddDefaultHeader("Authorization", "Bearer "+token)
 		s.Client = api.NewAPIClient(cfg)
+		s.Balance.Swap(res.Data.Credits)
 		return
 	}
 
@@ -95,7 +101,8 @@ func (s *Sdk) loadAgent() {
 }
 
 func (s *Sdk) loadShips() {
-	shipsData := utils.RetryRequest(s.Client.FleetAPI.GetMyShips(context.Background()).Execute, log.Logger, "unable to retrieve ships")
+	// FIXME: PAGINATION
+	shipsData := utils.RetryRequest(s.Client.FleetAPI.GetMyShips(context.Background()).Limit(20).Execute, log.Logger, "unable to retrieve ships")
 
 	ships := make(map[string]*Ship)
 
@@ -104,4 +111,18 @@ func (s *Sdk) loadShips() {
 	}
 
 	s.Ships = ships
+}
+
+func (s *Sdk) updateAgentBalance() {
+	ticker := time.NewTicker(time.Second * 20)
+
+	for range ticker.C {
+		res, errBody, err := utils.RetryRequestWithoutFatal(s.Client.AgentsAPI.GetMyAgent(context.Background()).Execute, s.logger)
+		if err != nil || errBody != nil {
+			s.logger.Error().Err(err).Interface("body", errBody).Msg("unable to load agent")
+			continue
+		}
+
+		s.Balance.Swap(res.Data.Credits)
+	}
 }

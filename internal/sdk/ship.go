@@ -388,3 +388,6 @@ func (s *Ship) enterCooldown(d time.Duration) {
 	s.logger.Info().Msgf("entering cooldown for %.2fs (until: %s)", d.Seconds(), time.Now().UTC().Add(d).String())
 	time.Sleep(d)
 }
+
+func (s *Ship) ReportStatus() {
+}

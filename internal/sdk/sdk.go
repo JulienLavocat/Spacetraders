@@ -15,15 +15,20 @@ import (
 )
 
 type Sdk struct {
-	Client     *api.APIClient
-	logger     zerolog.Logger
-	Market     *Market
-	Waypoints  *WaypointsService
-	Navigation *Navigation
-	Ships      map[string]*Ship
-	DB         *sql.DB
-	Ready      bool
-	Balance    atomic.Int64
+	logger       zerolog.Logger
+	FleetApi     *api.FleetAPIService
+	Market       *Market
+	Waypoints    *WaypointsService
+	Navigation   *Navigation
+	DB           *sql.DB
+	Ships        *ShipsService
+	Client       *api.APIClient
+	AgentsApi    *api.AgentsAPIService
+	SystemsApi   *api.SystemsAPIService
+	FactionsApi  *api.FactionsAPIService
+	ContractsApi *api.ContractsAPIService
+	Balance      atomic.Int64
+	Ready        bool
 }
 
 func NewSdk() *Sdk {
@@ -48,21 +53,19 @@ func NewSdk() *Sdk {
 		Balance:    atomic.Int64{},
 	}
 
+	sdk.Ships = newShipService(sdk)
+
 	sdk.loadAgent()
 
+	sdk.FleetApi = sdk.Client.FleetAPI
+	sdk.AgentsApi = sdk.Client.AgentsAPI
+	sdk.SystemsApi = sdk.Client.SystemsAPI
+	sdk.FactionsApi = sdk.Client.FactionsAPI
+	sdk.ContractsApi = sdk.Client.ContractsAPI
+
+	go sdk.updateAgentBalance()
+
 	return sdk
-}
-
-func (s *Sdk) Init() {
-	s.loadAgent()
-	s.loadShips()
-	s.Ready = true
-	go s.updateAgentBalance()
-}
-
-func (s *Sdk) GetShip(id string) (*Ship, bool) {
-	ship, ok := s.Ships[id]
-	return ship, ok
 }
 
 func (s *Sdk) RefreshBalance() error {
@@ -108,19 +111,6 @@ func (s *Sdk) loadAgent() {
 
 	cfg.AddDefaultHeader("Authorization", "Bearer "+res.Data.Token)
 	s.Client = api.NewAPIClient(cfg)
-}
-
-func (s *Sdk) loadShips() {
-	// FIXME: PAGINATION
-	shipsData := utils.RetryRequest(s.Client.FleetAPI.GetMyShips(context.Background()).Limit(20).Execute, log.Logger, "unable to retrieve ships")
-
-	ships := make(map[string]*Ship)
-
-	for _, ship := range shipsData.Data {
-		ships[ship.Symbol] = NewShip(s, ship)
-	}
-
-	s.Ships = ships
 }
 
 func (s *Sdk) updateAgentBalance() {

@@ -39,9 +39,16 @@ func NewShipResults() *ShipResults {
 
 // TODO: Elimintate ships paremeter to make the fleet autonomous
 func NewTradingFleet(s *sdk.Sdk, fleetId string, systemId string, updateInterval time.Duration, shipIds []string) *TradingFleet {
+	logger := log.With().Str("component", "TradingFleet").Str("id", fleetId).Logger()
+
 	var ships []*sdk.Ship
 	for _, shipId := range shipIds {
-		ships = append(ships, s.Ships[shipId])
+		ship, err := s.Ships.GetShip(shipId)
+		if err != nil {
+			logger.Fatal().Err(err).Msgf("ship %s not found", shipId)
+		}
+
+		ships = append(ships, ship)
 	}
 
 	return &TradingFleet{
@@ -49,7 +56,7 @@ func NewTradingFleet(s *sdk.Sdk, fleetId string, systemId string, updateInterval
 		Id:             fleetId,
 		systemId:       systemId,
 		ships:          ships,
-		logger:         log.With().Str("component", "TradingFleet").Str("id", fleetId).Logger(),
+		logger:         logger,
 		revenue:        atomic.Int64{},
 		expanses:       atomic.Int64{},
 		shipAvailables: make(chan *sdk.Ship, 100),

@@ -11,34 +11,46 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type MiningFleetCommander struct {
-	Id               string
+type MiningFleet struct {
 	logger           zerolog.Logger
-	s                *sdk.Sdk
+	startTime        time.Time
+	shipStates       map[string]string
 	hauler           *sdk.Ship
 	shipNeedsHauling chan string
 	miners           map[string]*sdk.Ship
-	shipStates       map[string]string
+	s                *sdk.Sdk
+	Id               string
 	systemId         string
 	target           string
 	sellPlan         []sdk.SellPlan
 	revenue          int32
 	expanses         int32
-	startTime        time.Time
 }
 
-func NewMiningFleetCommander(s *sdk.Sdk, id string, miners []*sdk.Ship, hauler *sdk.Ship) *MiningFleetCommander {
+func NewMiningFleet(s *sdk.Sdk, id string, minersIds []string, haulerId string) *MiningFleet {
+	logger := log.With().Str("component", "MiningFleetCommander").Str("id", id).Logger()
 	ships := make(map[string]*sdk.Ship)
 	shipStates := make(map[string]string)
-	for _, miner := range miners {
+	for _, minerId := range minersIds {
+
+		miner, err := s.Ships.GetShip(minerId)
+		if err != nil {
+			logger.Fatal().Err(err).Msgf("unable to get miner %s", minerId)
+		}
+
 		ships[miner.Id] = miner
 		shipStates[miner.Id] = "IDLE"
 	}
 
+	hauler, err := s.Ships.GetShip(haulerId)
+	if err != nil {
+		logger.Fatal().Err(err).Msgf("unable to get hauler %s", id)
+	}
+
 	shipStates[hauler.Id] = "IDLE"
 
-	fleet := &MiningFleetCommander{
-		logger:     log.With().Str("component", "MiningFleetCommander").Str("id", id).Logger(),
+	fleet := &MiningFleet{
+		logger:     logger,
 		s:          s,
 		miners:     ships,
 		hauler:     hauler,
@@ -49,7 +61,7 @@ func NewMiningFleetCommander(s *sdk.Sdk, id string, miners []*sdk.Ship, hauler *
 	return fleet
 }
 
-func (m *MiningFleetCommander) BeginOperations(systemId string) error {
+func (m *MiningFleet) BeginOperations(systemId string) error {
 	m.systemId = systemId
 
 	target, err := m.determineTarget()
@@ -73,11 +85,11 @@ func (m *MiningFleetCommander) BeginOperations(systemId string) error {
 	return nil
 }
 
-func (m *MiningFleetCommander) GetSnapshot() MiningFleetSnapshot {
+func (m *MiningFleet) GetSnapshot() MiningFleetSnapshot {
 	return newMiningFleetSnapshot(m)
 }
 
-func (m *MiningFleetCommander) determineTarget() (string, error) {
+func (m *MiningFleet) determineTarget() (string, error) {
 	// TODO: Find appropriate target based on what sells the most in the system
 	m.logger.Info().Msgf("determining mining target in %s", m.systemId)
 
@@ -92,7 +104,7 @@ func (m *MiningFleetCommander) determineTarget() (string, error) {
 	return waypoints[0].ID, nil
 }
 
-func (m *MiningFleetCommander) moveFleetToTarget() {
+func (m *MiningFleet) moveFleetToTarget() {
 	var wg sync.WaitGroup
 	for i := range m.miners {
 		m.logger.Info().Msgf("requesting mining ship %s to move to target %s", m.miners[i].Id, m.target)
@@ -122,7 +134,7 @@ func (m *MiningFleetCommander) moveFleetToTarget() {
 	m.logger.Info().Msgf("all ships in fleet have been moved to target %s", m.target)
 }
 
-func (m *MiningFleetCommander) performMiningOperations(ship *sdk.Ship) {
+func (m *MiningFleet) performMiningOperations(ship *sdk.Ship) {
 	log.Info().Msgf("%s begining mining operations", ship.Id)
 	m.shipStates[ship.Id] = "MINING"
 	for !ship.IsCargoFull {
@@ -134,7 +146,7 @@ func (m *MiningFleetCommander) performMiningOperations(ship *sdk.Ship) {
 	m.shipNeedsHauling <- ship.Id
 }
 
-func (m *MiningFleetCommander) performHaulingOperation() {
+func (m *MiningFleet) performHaulingOperation() {
 	m.logger.Info().Msgf("%s begining hauling operations", m.hauler.Id)
 
 	for shipId := range m.shipNeedsHauling {
@@ -167,7 +179,7 @@ func (m *MiningFleetCommander) performHaulingOperation() {
 	m.logger.Info().Msg("hauling operations completed")
 }
 
-func (m *MiningFleetCommander) sellHaulerCargo() {
+func (m *MiningFleet) sellHaulerCargo() {
 	m.shipStates[m.hauler.Id] = "SELLING"
 	m.sellPlan = m.s.Market.CreateSellPlan(m.systemId, m.hauler.Cargo)
 	revenue, expanses := m.hauler.Sell(m.sellPlan, m.Id)

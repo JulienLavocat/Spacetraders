@@ -8,18 +8,18 @@ import (
 )
 
 type RestApi struct {
-	miningFleets map[string]*ai.MiningFleetCommander
+	miningFleets map[string]*ai.MiningFleet
 	tradingFleet map[string]*ai.TradingFleet
 }
 
 func NewRestApi() *RestApi {
 	return &RestApi{
-		miningFleets: make(map[string]*ai.MiningFleetCommander),
+		miningFleets: make(map[string]*ai.MiningFleet),
 		tradingFleet: make(map[string]*ai.TradingFleet),
 	}
 }
 
-func (r *RestApi) AddMiningFleet(fleet *ai.MiningFleetCommander) {
+func (r *RestApi) AddMiningFleet(fleet *ai.MiningFleet) {
 	r.miningFleets[fleet.Id] = fleet
 }
 
@@ -40,10 +40,9 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 	router.GET("/ships/:shipId", func(c *gin.Context) {
 		shipId := c.Param("shipId")
 
-		ship, ok := s.Ships[shipId]
-		if !ok {
-			c.JSON(404, gin.H{"error": "ship not found"})
-			return
+		ship, err := s.Ships.GetShip(shipId)
+		if err != nil {
+			c.JSON(404, gin.H{"message": "ship not found", "error": err})
 		}
 
 		c.JSON(200, ship.GetSnapshot())
@@ -53,9 +52,9 @@ func (r *RestApi) StartApi(s *sdk.Sdk) {
 		shipId := c.Param("shipId")
 		destination := c.Param("destination")
 
-		ship, ok := s.GetShip(shipId)
-		if !ok {
-			c.JSON(404, gin.H{"error": "ship not found"})
+		ship, err := s.Ships.GetShip(shipId)
+		if err != nil {
+			c.JSON(404, gin.H{"message": "ship not found", "error": err})
 			return
 		}
 

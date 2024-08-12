@@ -16,6 +16,8 @@ func UseSchema(schema string) {
 	MarketProbes = MarketProbes.FromSchema(schema)
 	Modifiers = Modifiers.FromSchema(schema)
 	Products = Products.FromSchema(schema)
+	Ships = Ships.FromSchema(schema)
+	ShipsCargo = ShipsCargo.FromSchema(schema)
 	Systems = Systems.FromSchema(schema)
 	Traits = Traits.FromSchema(schema)
 	Transactions = Transactions.FromSchema(schema)

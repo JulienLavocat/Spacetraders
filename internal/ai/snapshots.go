@@ -18,7 +18,7 @@ type MiningFleetSnapshot struct {
 	Expanses   int32              `json:"expanses"`
 }
 
-func newMiningFleetSnapshot(fleet *MiningFleetCommander) MiningFleetSnapshot {
+func newMiningFleetSnapshot(fleet *MiningFleet) MiningFleetSnapshot {
 	miners := make([]sdk.ShipSnapshot, len(fleet.miners))
 
 	i := 0

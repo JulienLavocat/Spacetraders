@@ -18,8 +18,6 @@ func main() {
 	restApi := rest.NewRestApi()
 	go restApi.StartApi(s)
 
-	s.Init()
-
 	// go createMiningFleet(s, restApi)
 	go createTradeFleet(s, restApi)
 
@@ -30,9 +28,9 @@ func main() {
 }
 
 func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
-	miners := []*sdk.Ship{s.Ships["JLVC-3"], s.Ships["JLVC-4"], s.Ships["JLVC-5"]}
-	hauler := s.Ships["JLVC-1"]
-	miningFleet := ai.NewMiningFleetCommander(s, "MNG_1", miners, hauler)
+	miners := []string{"JLVC-3", "JLVC-4", "JLVC-5"}
+	hauler := "JLVC-1"
+	miningFleet := ai.NewMiningFleet(s, "MNG_1", miners, hauler)
 	restApi.AddMiningFleet(miningFleet)
 
 	if err := miningFleet.BeginOperations("X1-QA42"); err != nil {

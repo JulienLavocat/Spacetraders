@@ -30,6 +30,9 @@ type shipsTable struct {
 	MaxCargo     postgres.ColumnInteger
 	CurrentCargo postgres.ColumnInteger
 	CargoFull    postgres.ColumnBool
+	Cargo        postgres.ColumnString
+	Route        postgres.ColumnString
+	UpdatedAt    postgres.ColumnTimestampz
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -83,8 +86,11 @@ func newShipsTableImpl(schemaName, tableName, alias string) shipsTable {
 		MaxCargoColumn     = postgres.IntegerColumn("max_cargo")
 		CurrentCargoColumn = postgres.IntegerColumn("current_cargo")
 		CargoFullColumn    = postgres.BoolColumn("cargo_full")
-		allColumns         = postgres.ColumnList{IDColumn, ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn}
-		mutableColumns     = postgres.ColumnList{ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn}
+		CargoColumn        = postgres.StringColumn("cargo")
+		RouteColumn        = postgres.StringColumn("route")
+		UpdatedAtColumn    = postgres.TimestampzColumn("updated_at")
+		allColumns         = postgres.ColumnList{IDColumn, ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn}
+		mutableColumns     = postgres.ColumnList{ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn}
 	)
 
 	return shipsTable{
@@ -104,6 +110,9 @@ func newShipsTableImpl(schemaName, tableName, alias string) shipsTable {
 		MaxCargo:     MaxCargoColumn,
 		CurrentCargo: CurrentCargoColumn,
 		CargoFull:    CargoFullColumn,
+		Cargo:        CargoColumn,
+		Route:        RouteColumn,
+		UpdatedAt:    UpdatedAtColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

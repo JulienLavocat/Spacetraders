@@ -15,8 +15,8 @@ func main() {
 	utils.SetupLogger()
 	s := sdk.NewSdk()
 
-	restApi := rest.NewRestApi()
-	go restApi.StartApi(s)
+	restApi := rest.NewRestApi(s)
+	go restApi.StartApi()
 
 	// go createMiningFleet(s, restApi)
 	go createTradeFleet(s, restApi)

@@ -16,9 +16,9 @@ type Navigation struct {
 }
 
 type PathSegment struct {
-	To      string
-	Fuel    int32
-	AggCost int32
+	To      string `json:"to"`
+	Fuel    int32  `json:"fuel"`
+	AggCost int32  `json:"aggCost"`
 }
 
 func NewNavigation(db *sql.DB) *Navigation {

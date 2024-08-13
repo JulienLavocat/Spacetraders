@@ -18,18 +18,19 @@ type Ship struct {
 	logger          zerolog.Logger
 	ctx             context.Context
 	Fuel            api.ShipFuel
+	sdk             *Sdk
 	Cargo           Cargo
 	Nav             api.ShipNav
 	Id              string
 	Role            api.ShipRole
-	refuelThreshold int32
+	route           []PathSegment
 	CurrentCargo    int32
 	MaxCargo        int32
+	refuelThreshold int32
 	IsDocked        bool
 	IsInOrbit       bool
 	IsCargoFull     bool
 	HasCargo        bool
-	sdk             *Sdk
 }
 
 func NewShip(sdk *Sdk, ship api.Ship) *Ship {
@@ -45,6 +46,7 @@ func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 
 	s.setCargo(ship.Cargo)
 	s.setNav(ship.Nav, true)
+	s.reportStatus()
 
 	if ship.Cooldown.RemainingSeconds > 0 {
 		s.enterCooldown(time.Duration(ship.Cooldown.RemainingSeconds) * time.Second)
@@ -66,13 +68,14 @@ func (s *Ship) NavigateTo(destination string) int32 {
 		s.logger.Fatal().Err(err).Msg("unable to plot route")
 	}
 
+	s.route = route
+
 	var stops []string
 	for _, nextStop := range route {
 		stops = append(stops, fmt.Sprintf("%s (%d)", nextStop.To, nextStop.Fuel))
 	}
-	s.logger.Info().Str("path", strings.Join(stops, " -> ")).Msgf("established route from %s to %s", s.Nav.WaypointSymbol, destination)
 
-	s.logger.Info().Msgf("navigating from %s to %s", s.Nav.WaypointSymbol, destination)
+	s.logger.Info().Str("path", strings.Join(stops, " -> ")).Msgf("navigating from %s to %s", s.Nav.WaypointSymbol, destination)
 
 	for _, nextStop := range route {
 		if nextStop.To == s.Nav.WaypointSymbol {
@@ -94,6 +97,7 @@ func (s *Ship) NavigateTo(destination string) int32 {
 			Str("shipId", s.Id).
 			Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
 
+		s.reportStatus()
 		s.setNav(res.Data.Nav, false)
 		s.Fuel = res.Data.Fuel
 
@@ -110,13 +114,13 @@ func (s *Ship) Orbit() *Ship {
 		return s
 	}
 
-	s.logger.Info().Msg("moving to orbit")
+	s.logger.Info().Msgf("moving to orbit of %s", s.Nav.WaypointSymbol)
 
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.OrbitShip(s.ctx, s.Id).Execute, s.logger, "unable to move to orbit")
 
 	s.setNav(res.Data.Nav, false)
+	s.reportStatus()
 
-	s.logger.Info().Msgf("oribiting %s", s.Nav.WaypointSymbol)
 	return s
 }
 
@@ -131,6 +135,7 @@ func (s *Ship) Dock() *Ship {
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.DockShip(s.ctx, s.Id).Execute, s.logger, "unable to dock ship")
 
 	s.setNav(res.Data.Nav, false)
+	s.reportStatus()
 
 	return s
 }
@@ -157,6 +162,8 @@ func (s *Ship) Sell(plan []SellPlan, correlationId string) (int32, int32) {
 				s.logger.Error().Err(err).Interface("transation", res.Data.Transaction).Interface("agent", res.Data.Agent).Msgf("unable to report transation")
 			}
 
+			s.reportStatus()
+
 			tx := res.Data.Transaction
 			revenue += tx.TotalPrice
 			s.logger.Info().Msgf("sold %d %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
@@ -167,7 +174,6 @@ func (s *Ship) Sell(plan []SellPlan, correlationId string) (int32, int32) {
 }
 
 func (s *Ship) Refuel() int32 {
-	s.logger.Info().Msgf("refueling ship (%d/%d)", s.Fuel.Current, s.Fuel.Capacity)
 	s.Dock()
 
 	if !s.sdk.Waypoints.CanRefuelAt(s.Nav.WaypointSymbol) {
@@ -179,13 +185,15 @@ func (s *Ship) Refuel() int32 {
 
 	s.Fuel = res.Data.Fuel
 
-	log.Info().Msgf("refueled %d units (%d/%d) at the cost of %d (%d/unit), remaining credits is %d",
+	s.logger.Info().Msgf("refueled %d units (%d/%d) at the cost of %d (%d/unit), remaining credits is %d",
 		res.Data.Transaction.Units,
 		s.Fuel.Current,
 		s.Fuel.Capacity,
 		res.Data.Transaction.TotalPrice,
 		res.Data.Transaction.PricePerUnit,
 		res.Data.Agent.Credits)
+
+	s.reportStatus()
 
 	return res.Data.Transaction.TotalPrice
 }
@@ -198,14 +206,10 @@ func (s *Ship) Mine() *Ship {
 	s.logger.Info().Msgf("extracted %d %s, ship cargo at %d/%d", res.Data.Extraction.Yield.Units, res.Data.Extraction.Yield.Symbol, res.Data.Cargo.Units, res.Data.Cargo.Capacity)
 
 	s.setCargo(res.Data.Cargo)
-
 	s.enterCooldown(time.Duration(res.Data.Cooldown.RemainingSeconds) * time.Second)
+	s.reportStatus()
 
 	return s
-}
-
-func (s *Ship) CountInCargo(product string) int32 {
-	return s.Cargo[product]
 }
 
 func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
@@ -220,7 +224,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 
 		amountInCargo, ok := s.Cargo[term.TradeSymbol]
 		if !ok {
-			log.Info().Msgf("product %s not in cargo", term.TradeSymbol)
+			s.logger.Info().Msgf("product %s not in cargo", term.TradeSymbol)
 			canBeFulfilled = false
 			continue
 		}
@@ -237,6 +241,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 			"unable to deliver %d units of %s",
 			term.UnitsRequired, term.TradeSymbol)
 		s.setCargo(res.Data.Cargo)
+		s.reportStatus()
 
 		contract = res.Data.Contract
 
@@ -266,14 +271,17 @@ func (s *Ship) TransferPartialCargo(shipId string, maxAmount int32) {
 		s.setCargo(res.Data.Cargo)
 		maxAmount -= amount
 		if maxAmount <= 0 {
+			s.reportStatus()
 			return
 		}
 	}
+	s.reportStatus()
 }
 
 func (s *Ship) RefreshCargo() {
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.GetMyShipCargo(s.ctx, s.Id).Execute, s.logger, "unable to refresh cargo")
 	s.setCargo(res.Data)
+	s.reportStatus()
 }
 
 func (s *Ship) JettisonCargo() error {
@@ -290,16 +298,17 @@ func (s *Ship) JettisonCargo() error {
 		s.logger.Println(res.Data.Cargo, errBody)
 		s.setCargo(res.Data.Cargo)
 	}
+	s.reportStatus()
 
 	return nil
 }
 
 func (s *Ship) Buy(product string, amount int32, correlationId string) (int32, error) {
-	s.logger.Info().Msgf("attempting to buy %d %s at %s", amount, product, s.Nav.WaypointSymbol)
 	if amount == 0 {
 		s.logger.Warn().Msgf("attempt to buy 0 %s, aborting", product)
 		return 0, nil
 	}
+
 	res, errBody, err := utils.RetryRequestWithoutFatal(s.sdk.Client.FleetAPI.PurchaseCargo(s.ctx, s.Id).PurchaseCargoRequest(*api.NewPurchaseCargoRequest(api.TradeSymbol(product), amount)).Execute, s.logger)
 	if err != nil || errBody != nil {
 		s.logger.Err(err).Interface("body", errBody).Msgf("unable to buy goods at %s", s.Nav.WaypointSymbol)
@@ -311,9 +320,10 @@ func (s *Ship) Buy(product string, amount int32, correlationId string) (int32, e
 	}
 
 	s.setCargo(res.Data.Cargo)
+	s.reportStatus()
 
 	tx := res.Data.Transaction
-	s.logger.Info().Msgf("bought %d %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
+	s.logger.Info().Msgf("bought %d %s at %s for %d (%d/u), balance is now %d", tx.Units, tx.TradeSymbol, s.Nav.WaypointSymbol, tx.TotalPrice, tx.PricePerUnit, res.Data.Agent.Credits)
 
 	return res.Data.Transaction.TotalPrice, nil
 }
@@ -389,5 +399,8 @@ func (s *Ship) enterCooldown(d time.Duration) {
 	time.Sleep(d)
 }
 
-func (s *Ship) ReportStatus() {
+func (s *Ship) reportStatus() {
+	if err := s.sdk.Ships.ReportStatus(s); err != nil {
+		log.Error().Err(err).Msgf("an error occured while updating ship status %s", s.Id)
+	}
 }

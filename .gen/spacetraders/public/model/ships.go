@@ -25,4 +25,7 @@ type Ships struct {
 	MaxCargo     int32
 	CurrentCargo int32
 	CargoFull    bool
+	Cargo        string
+	Route        *string
+	UpdatedAt    time.Time
 }

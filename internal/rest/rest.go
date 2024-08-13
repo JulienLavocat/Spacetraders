@@ -23,6 +23,7 @@ func NewRestApi(s *sdk.Sdk) *RestApi {
 	return &RestApi{
 		miningFleets: make(map[string]*ai.MiningFleet),
 		tradingFleet: make(map[string]*ai.TradingFleet),
+		s:            s,
 	}
 }
 

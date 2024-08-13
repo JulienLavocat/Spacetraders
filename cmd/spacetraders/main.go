@@ -39,7 +39,7 @@ func createMiningFleet(s *sdk.Sdk, restApi *rest.RestApi) {
 }
 
 func createTradeFleet(s *sdk.Sdk, restApi *rest.RestApi) {
-	fleet := ai.NewTradingFleet(s, "TRD_1", "X1-NT44", time.Minute, []string{"JLVC-1", "JLVC-D"})
+	fleet := ai.NewTradingFleet(s, "TRD_1", "X1-NT44", time.Minute, []string{"JLVC-1", "JLVC-D", "JLVC-1C", "JLVC-1D"})
 	restApi.AddTradingFleet(fleet)
 	fleet.BeginOperations()
 }

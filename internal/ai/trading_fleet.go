@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/julienlavocat/spacetraders/internal/sdk"
+	"github.com/julienlavocat/spacetraders/internal/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -18,7 +19,7 @@ type TradingFleet struct {
 	shipsResults           map[string]*ShipResults
 	systemId               string
 	Id                     string
-	tradeRoutes            []*sdk.TradeRoute
+	tradeRoutes            utils.Queue[*sdk.TradeRoute]
 	ships                  []*sdk.Ship
 	expanses               atomic.Int64
 	revenue                atomic.Int64
@@ -63,6 +64,7 @@ func NewTradingFleet(s *sdk.Sdk, fleetId string, systemId string, updateInterval
 		startTime:      time.Now().UTC(),
 		shipsResults:   make(map[string]*ShipResults),
 		updateInterval: updateInterval,
+		tradeRoutes:    utils.NewQueue[*sdk.TradeRoute](),
 	}
 }
 
@@ -81,7 +83,7 @@ func (t *TradingFleet) BeginOperations() {
 	t.logger.Info().Msg("begining operations")
 	for ship := range t.shipAvailables {
 		t.logger.Info().Msgf("%s is avaible", ship.Id)
-		tradeRoute := t.findTradeRoute(ship)
+		tradeRoute := t.getNextTradeRoute()
 
 		if tradeRoute == nil {
 			t.logger.Warn().Str("ship", ship.Id).Msgf("unable to find route for ship %s (fuel capacity: %d), retry in %.2fs", ship.Id, ship.Fuel.Capacity, t.updateInterval.Seconds())
@@ -94,8 +96,8 @@ func (t *TradingFleet) BeginOperations() {
 
 		t.logger.Info().Interface("route", tradeRoute).Str("ship", ship.Id).Msgf("found trade route for ship %s", ship.Id)
 
-		go func() {
-			revenue, expanses, err := ship.FollowTradeRoute(tradeRoute)
+		go func(route *sdk.TradeRoute) {
+			revenue, expanses, err := ship.FollowTradeRoute(route)
 			t.revenue.Add(int64(revenue))
 			t.expanses.Add(int64(expanses))
 
@@ -108,7 +110,7 @@ func (t *TradingFleet) BeginOperations() {
 			}
 
 			t.shipAvailables <- ship
-		}()
+		}(tradeRoute)
 	}
 }
 
@@ -116,20 +118,17 @@ func (t *TradingFleet) GetSnapshot() TradingFleetSnapshot {
 	return newTradingFleetSnapshot(t)
 }
 
-func (t *TradingFleet) findTradeRoute(ship *sdk.Ship) *sdk.TradeRoute {
+func (t *TradingFleet) getNextTradeRoute() *sdk.TradeRoute {
 	if time.Since(t.lastTradeRoutesUpdates) >= t.updateInterval {
-		t.tradeRoutes = t.s.Market.GetTradeRoutes(t.systemId)
+		t.tradeRoutes.Clear()
+		t.tradeRoutes.QueueAll(t.s.Market.GetTradeRoutes(t.systemId))
 		t.lastTradeRoutesUpdates = time.Now()
 		t.logger.Info().Msg("updated trade routes")
 	}
 
-	for _, route := range t.tradeRoutes {
-		if route.FuelCost > ship.Fuel.Capacity || route.EstimatedProfits < 0 {
-			continue
-		}
-
-		return route
+	if !t.tradeRoutes.HasNext() {
+		return nil
 	}
 
-	return nil
+	return t.tradeRoutes.Dequeue()
 }

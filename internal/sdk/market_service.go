@@ -275,7 +275,7 @@ func (m *Market) GetTradeRoutes(systemId string) []*TradeRoute {
 	}
 
 	// TODO: Calculate fuel cost for each routes
-	var tradeRoutes []*TradeRoute
+	tradeRoutes := make([]*TradeRoute, 0)
 	for product, buyOpportunity := range buyOpportuinities {
 		sellOpportunity, ok := sellOpportuinities[product]
 		if !ok || sellOpportunity.ID == buyOpportunity.ID {
@@ -284,6 +284,11 @@ func (m *Market) GetTradeRoutes(systemId string) []*TradeRoute {
 
 		maxAmount := min(buyOpportunity.Volume, sellOpportunity.Volume)
 
+		estimatedProfitsPerUnit := sellOpportunity.Price - buyOpportunity.Price
+		if estimatedProfitsPerUnit <= 0 {
+			continue
+		}
+
 		tradeRoutes = append(tradeRoutes, &TradeRoute{
 			Product:                 product,
 			SellPrice:               sellOpportunity.Price,
@@ -291,8 +296,8 @@ func (m *Market) GetTradeRoutes(systemId string) []*TradeRoute {
 			SellAt:                  sellOpportunity.ID,
 			BuyAt:                   buyOpportunity.ID,
 			MaxAmount:               maxAmount,
-			EstimatedProfits:        (sellOpportunity.Price - buyOpportunity.Price) * maxAmount,
-			EstimatedProfitsPerUnit: sellOpportunity.Price - buyOpportunity.Price,
+			EstimatedProfits:        estimatedProfitsPerUnit * maxAmount,
+			EstimatedProfitsPerUnit: estimatedProfitsPerUnit,
 			FuelCost:                GetFuelCost(buyOpportunity.X, buyOpportunity.Y, sellOpportunity.X, sellOpportunity.Y),
 		})
 	}
@@ -300,6 +305,8 @@ func (m *Market) GetTradeRoutes(systemId string) []*TradeRoute {
 	slices.SortFunc(tradeRoutes, func(a, b *TradeRoute) int {
 		return cmp.Compare(b.EstimatedProfits, a.EstimatedProfits)
 	})
+
+	log.Debug().Interface("routes", tradeRoutes).Msg(systemId)
 
 	return tradeRoutes
 }

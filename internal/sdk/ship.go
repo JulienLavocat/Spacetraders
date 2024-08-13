@@ -2,7 +2,6 @@ package sdk
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -307,18 +306,17 @@ func (s *Ship) RefreshCargo() {
 }
 
 func (s *Ship) JettisonCargo() error {
+	s.logger.Info().Interface("cargo", s.Cargo).Msg("jettisonning cargo")
+
 	s.ensureCooldown()
 	for product, amount := range s.Cargo {
 		res, errBody, err := utils.RetryRequestWithoutFatal(s.sdk.Client.FleetAPI.Jettison(s.ctx, s.Id).JettisonRequest(*api.NewJettisonRequest(api.TradeSymbol(product), amount)).Execute, s.logger)
 		if err != nil {
+			s.logger.Error().Err(err).Interface("body", errBody).Msgf("unable to jettison %d %s", amount, product)
 			return err
 		}
 
-		if errBody != nil {
-			return errors.New(fmt.Sprint(errBody))
-		}
-
-		s.logger.Println(res.Data.Cargo, errBody)
+		s.logger.Info().Msgf("jettisonned %d %s", amount, product)
 		s.setCargo(res.Data.Cargo)
 	}
 	s.reportStatus()

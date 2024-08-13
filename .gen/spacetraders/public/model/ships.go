@@ -29,4 +29,5 @@ type Ships struct {
 	Route        *string
 	UpdatedAt    time.Time
 	TradeRoute   *string
+	Cooldown     *time.Time
 }

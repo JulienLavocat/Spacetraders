@@ -18,20 +18,21 @@ type Ship struct {
 	logger          zerolog.Logger
 	ctx             context.Context
 	Fuel            api.ShipFuel
+	tradeRoute      *TradeRoute
 	sdk             *Sdk
 	Cargo           Cargo
+	cooldownUntil   *time.Time
 	Nav             api.ShipNav
 	Id              string
 	Role            api.ShipRole
 	route           []PathSegment
-	CurrentCargo    int32
-	MaxCargo        int32
 	refuelThreshold int32
+	MaxCargo        int32
+	CurrentCargo    int32
 	IsDocked        bool
 	IsInOrbit       bool
 	IsCargoFull     bool
 	HasCargo        bool
-	tradeRoute      *TradeRoute
 }
 
 func NewShip(sdk *Sdk, ship api.Ship) *Ship {
@@ -49,8 +50,8 @@ func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 	s.setNav(ship.Nav, true)
 	s.reportStatus()
 
-	if ship.Cooldown.RemainingSeconds > 0 {
-		s.enterCooldown(time.Duration(ship.Cooldown.RemainingSeconds) * time.Second)
+	if ship.Cooldown.HasExpiration() {
+		s.setCooldown(*ship.Cooldown.Expiration)
 	}
 
 	s.logger.Info().Msg("ship loaded")
@@ -59,6 +60,7 @@ func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 }
 
 func (s *Ship) NavigateTo(destination string) int32 {
+	s.ensureCooldown()
 	s.logger.Info().Msgf("plotting route from %s to %s", s.Nav.WaypointSymbol, destination)
 	expanses := int32(0)
 
@@ -79,6 +81,8 @@ func (s *Ship) NavigateTo(destination string) int32 {
 	s.logger.Info().Str("path", strings.Join(stops, " -> ")).Msgf("navigating from %s to %s", s.Nav.WaypointSymbol, destination)
 
 	for _, nextStop := range route {
+		s.ensureCooldown()
+
 		if nextStop.To == s.Nav.WaypointSymbol {
 			s.logger.Info().Msgf("ship already at %s", nextStop.To)
 			continue
@@ -92,16 +96,17 @@ func (s *Ship) NavigateTo(destination string) int32 {
 			s.sdk.Client.FleetAPI.NavigateShip(s.ctx, s.Id).NavigateShipRequest(*api.NewNavigateShipRequest(nextStop.To)).Execute,
 			s.logger, "unable to navigate to waypoint %s", nextStop.To)
 
-		navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
+		navigationTime := s.Nav.Route.Arrival.UTC().Sub(s.Nav.Route.DepartureTime.UTC())
 
 		s.logger.Info().
 			Str("shipId", s.Id).
 			Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
 
-		s.reportStatus()
 		s.setNav(res.Data.Nav, false)
 		s.Fuel = res.Data.Fuel
+		s.reportStatus()
 
+		s.ensureCooldown()
 		s.logger.Info().Str("shipId", s.Id).Msgf("navigated to %s", nextStop.To)
 	}
 
@@ -111,6 +116,8 @@ func (s *Ship) NavigateTo(destination string) int32 {
 }
 
 func (s *Ship) Orbit() *Ship {
+	s.ensureCooldown()
+
 	if s.IsInOrbit {
 		return s
 	}
@@ -126,6 +133,8 @@ func (s *Ship) Orbit() *Ship {
 }
 
 func (s *Ship) Dock() *Ship {
+	s.ensureCooldown()
+
 	if s.IsDocked {
 		s.logger.Info().Msgf("ship already docked")
 		return s
@@ -142,6 +151,8 @@ func (s *Ship) Dock() *Ship {
 }
 
 func (s *Ship) Sell(plan []SellPlan, correlationId string) (int32, int32) {
+	s.ensureCooldown()
+
 	revenue := int32(0)
 	expanses := int32(0)
 
@@ -175,6 +186,7 @@ func (s *Ship) Sell(plan []SellPlan, correlationId string) (int32, int32) {
 }
 
 func (s *Ship) Refuel() int32 {
+	s.ensureCooldown()
 	s.Dock()
 
 	if !s.sdk.Waypoints.CanRefuelAt(s.Nav.WaypointSymbol) {
@@ -200,6 +212,7 @@ func (s *Ship) Refuel() int32 {
 }
 
 func (s *Ship) Mine() *Ship {
+	s.ensureCooldown()
 	s.Orbit()
 
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.ExtractResources(s.ctx, s.Id).ExtractResourcesRequest(*api.NewExtractResourcesRequest()).Execute, s.logger, "unable to mine")
@@ -207,7 +220,12 @@ func (s *Ship) Mine() *Ship {
 	s.logger.Info().Msgf("extracted %d %s, ship cargo at %d/%d", res.Data.Extraction.Yield.Units, res.Data.Extraction.Yield.Symbol, res.Data.Cargo.Units, res.Data.Cargo.Capacity)
 
 	s.setCargo(res.Data.Cargo)
-	s.enterCooldown(time.Duration(res.Data.Cooldown.RemainingSeconds) * time.Second)
+
+	if res.Data.Cooldown.HasExpiration() {
+		s.setCooldown(*res.Data.Cooldown.Expiration)
+	}
+
+	// s.enterCooldown(time.Duration(res.Data.Cooldown.RemainingSeconds) * time.Second)
 	s.reportStatus()
 
 	return s
@@ -215,6 +233,8 @@ func (s *Ship) Mine() *Ship {
 
 func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 	// TODO: Sort before iterating, just in case some destinations aren't the same to avoid unecessary trips between different goods
+
+	s.ensureCooldown()
 
 	canBeFulfilled := true
 	for _, term := range contract.Terms.Deliver {
@@ -264,6 +284,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 }
 
 func (s *Ship) TransferPartialCargo(shipId string, maxAmount int32) {
+	s.ensureCooldown()
 	for product, amount := range s.Cargo {
 		res := utils.RetryRequest(
 			s.sdk.Client.FleetAPI.TransferCargo(s.ctx, s.Id).TransferCargoRequest(*api.NewTransferCargoRequest(api.TradeSymbol(product), min(amount, maxAmount), shipId)).Execute,
@@ -286,6 +307,7 @@ func (s *Ship) RefreshCargo() {
 }
 
 func (s *Ship) JettisonCargo() error {
+	s.ensureCooldown()
 	for product, amount := range s.Cargo {
 		res, errBody, err := utils.RetryRequestWithoutFatal(s.sdk.Client.FleetAPI.Jettison(s.ctx, s.Id).JettisonRequest(*api.NewJettisonRequest(api.TradeSymbol(product), amount)).Execute, s.logger)
 		if err != nil {
@@ -305,6 +327,8 @@ func (s *Ship) JettisonCargo() error {
 }
 
 func (s *Ship) Buy(product string, amount int32, correlationId string) (int32, error) {
+	s.ensureCooldown()
+
 	if amount == 0 {
 		s.logger.Warn().Msgf("attempt to buy 0 %s, aborting", product)
 		return 0, nil
@@ -330,6 +354,8 @@ func (s *Ship) Buy(product string, amount int32, correlationId string) (int32, e
 }
 
 func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
+	s.ensureCooldown()
+
 	revenue := int32(0)
 	expanses := int32(0)
 	correlationId := uuid.NewString()
@@ -377,9 +403,11 @@ func (s *Ship) setNav(data api.ShipNav, initial bool) {
 	s.IsInOrbit = data.Status == api.IN_ORBIT
 
 	// If ship is a probe and it's the initial load time, we don't wait for it's cooldown as they are only moved once (for market data purposes)
-	if s.Nav.Route.Arrival.After(time.Now().UTC()) && (s.Role != api.SHIP_ROLE_SATELLITE || !initial) {
-		navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
-		s.enterCooldown(navigationTime)
+	if s.Nav.Route.Arrival.After(time.Now().UTC()) {
+		// navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
+		// s.enterCooldown(navigationTime)
+		// s.ensureCooldown(&s.Nav.Route.Arrival)
+		s.setCooldown(s.Nav.Route.Arrival)
 	}
 }
 
@@ -398,9 +426,30 @@ func (s *Ship) setCargo(data api.ShipCargo) {
 	s.MaxCargo = data.Capacity
 }
 
-func (s *Ship) enterCooldown(d time.Duration) {
-	s.logger.Info().Msgf("entering cooldown for %.2fs (until: %s)", d.Seconds(), time.Now().UTC().Add(d).String())
-	time.Sleep(d)
+func (s *Ship) setCooldown(endsAt time.Time) {
+	if endsAt.UTC().Before(time.Now().UTC()) {
+		s.logger.Debug().Msgf("cooldown ending at %s is in the past, will not update the current cooldown timer ending at %s", endsAt, s.cooldownUntil)
+		return
+	}
+
+	s.logger.Debug().Msgf("setting cooldown to %s", endsAt)
+	s.cooldownUntil = &endsAt
+}
+
+func (s *Ship) ensureCooldown() {
+	if s.cooldownUntil == nil {
+		s.logger.Debug().Msg("ship isn't in cooldown")
+		return
+	}
+
+	if s.cooldownUntil.Before(time.Now().UTC()) {
+		s.logger.Debug().Msgf("cooldown ending at %s is in the past, skipping", s.cooldownUntil)
+		return
+	}
+
+	sleepDuration := s.cooldownUntil.UTC().Sub(time.Now().UTC())
+	s.logger.Info().Msgf("entering cooldown for %.2fs (until: %s)", sleepDuration.Seconds(), time.Now().UTC().Add(sleepDuration).String())
+	time.Sleep(sleepDuration)
 }
 
 func (s *Ship) reportStatus() {

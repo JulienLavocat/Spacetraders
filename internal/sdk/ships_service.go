@@ -83,6 +83,7 @@ func (s *ShipsService) ReportStatus(ship *Ship) error {
 		Ships.Cargo.SET(Ships.EXCLUDED.Cargo),
 		Ships.Route.SET(Ships.EXCLUDED.Route),
 		Ships.TradeRoute.SET(Ships.EXCLUDED.TradeRoute),
+		Ships.Cooldown.SET(Ships.EXCLUDED.Cooldown),
 		Ships.UpdatedAt.SET(NOW()),
 	)).MODEL(model.Ships{
 		ID:           ship.Id,
@@ -101,6 +102,7 @@ func (s *ShipsService) ReportStatus(ship *Ship) error {
 		Cargo:        string(cargo),
 		Route:        &route,
 		TradeRoute:   &tradeRoute,
+		Cooldown:     ship.cooldownUntil,
 	})
 
 	_, err = q.Exec(s.sdk.DB)

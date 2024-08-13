@@ -34,6 +34,7 @@ type shipsTable struct {
 	Route        postgres.ColumnString
 	UpdatedAt    postgres.ColumnTimestampz
 	TradeRoute   postgres.ColumnString
+	Cooldown     postgres.ColumnTimestampz
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -91,8 +92,9 @@ func newShipsTableImpl(schemaName, tableName, alias string) shipsTable {
 		RouteColumn        = postgres.StringColumn("route")
 		UpdatedAtColumn    = postgres.TimestampzColumn("updated_at")
 		TradeRouteColumn   = postgres.StringColumn("trade_route")
-		allColumns         = postgres.ColumnList{IDColumn, ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn, TradeRouteColumn}
-		mutableColumns     = postgres.ColumnList{ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn, TradeRouteColumn}
+		CooldownColumn     = postgres.TimestampzColumn("cooldown")
+		allColumns         = postgres.ColumnList{IDColumn, ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn, TradeRouteColumn, CooldownColumn}
+		mutableColumns     = postgres.ColumnList{ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn, TradeRouteColumn, CooldownColumn}
 	)
 
 	return shipsTable{
@@ -116,6 +118,7 @@ func newShipsTableImpl(schemaName, tableName, alias string) shipsTable {
 		Route:        RouteColumn,
 		UpdatedAt:    UpdatedAtColumn,
 		TradeRoute:   TradeRouteColumn,
+		Cooldown:     CooldownColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

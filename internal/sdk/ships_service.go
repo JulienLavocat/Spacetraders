@@ -60,6 +60,13 @@ func (s *ShipsService) ReportStatus(ship *Ship) error {
 	}
 	route := string(routeJson)
 
+	tradeRouteJson, err := json.Marshal(ship.tradeRoute)
+	if err != nil {
+		s.logger.Error().Err(err).Msgf("unable to marshal trade route as json for ship %s", ship.Id)
+		return err
+	}
+	tradeRoute := string(tradeRouteJson)
+
 	q := Ships.INSERT(Ships.AllColumns.Except(Ships.UpdatedAt)).ON_CONFLICT(Ships.ID).DO_UPDATE(SET(
 		Ships.ArrivalAt.SET(Ships.EXCLUDED.ArrivalAt),
 		Ships.DepartedAt.SET(Ships.EXCLUDED.DepartedAt),
@@ -75,6 +82,7 @@ func (s *ShipsService) ReportStatus(ship *Ship) error {
 		Ships.CargoFull.SET(Ships.EXCLUDED.CargoFull),
 		Ships.Cargo.SET(Ships.EXCLUDED.Cargo),
 		Ships.Route.SET(Ships.EXCLUDED.Route),
+		Ships.TradeRoute.SET(Ships.EXCLUDED.TradeRoute),
 		Ships.UpdatedAt.SET(NOW()),
 	)).MODEL(model.Ships{
 		ID:           ship.Id,
@@ -92,6 +100,7 @@ func (s *ShipsService) ReportStatus(ship *Ship) error {
 		CurrentCargo: ship.CurrentCargo,
 		Cargo:        string(cargo),
 		Route:        &route,
+		TradeRoute:   &tradeRoute,
 	})
 
 	_, err = q.Exec(s.sdk.DB)

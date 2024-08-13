@@ -33,6 +33,7 @@ type shipsTable struct {
 	Cargo        postgres.ColumnString
 	Route        postgres.ColumnString
 	UpdatedAt    postgres.ColumnTimestampz
+	TradeRoute   postgres.ColumnString
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -89,8 +90,9 @@ func newShipsTableImpl(schemaName, tableName, alias string) shipsTable {
 		CargoColumn        = postgres.StringColumn("cargo")
 		RouteColumn        = postgres.StringColumn("route")
 		UpdatedAtColumn    = postgres.TimestampzColumn("updated_at")
-		allColumns         = postgres.ColumnList{IDColumn, ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn}
-		mutableColumns     = postgres.ColumnList{ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn}
+		TradeRouteColumn   = postgres.StringColumn("trade_route")
+		allColumns         = postgres.ColumnList{IDColumn, ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn, TradeRouteColumn}
+		mutableColumns     = postgres.ColumnList{ArrivalAtColumn, DepartedAtColumn, WaypointColumn, SystemColumn, StatusColumn, DestinationColumn, OriginColumn, MaxFuelColumn, CurrentFuelColumn, MaxCargoColumn, CurrentCargoColumn, CargoFullColumn, CargoColumn, RouteColumn, UpdatedAtColumn, TradeRouteColumn}
 	)
 
 	return shipsTable{
@@ -113,6 +115,7 @@ func newShipsTableImpl(schemaName, tableName, alias string) shipsTable {
 		Cargo:        CargoColumn,
 		Route:        RouteColumn,
 		UpdatedAt:    UpdatedAtColumn,
+		TradeRoute:   TradeRouteColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

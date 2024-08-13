@@ -31,6 +31,7 @@ type Ship struct {
 	IsInOrbit       bool
 	IsCargoFull     bool
 	HasCargo        bool
+	tradeRoute      *TradeRoute
 }
 
 func NewShip(sdk *Sdk, ship api.Ship) *Ship {
@@ -332,6 +333,7 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 	revenue := int32(0)
 	expanses := int32(0)
 	correlationId := uuid.NewString()
+	s.tradeRoute = route
 
 	amount := min(s.MaxCargo-s.CurrentCargo, route.MaxAmount)
 	expanses += s.NavigateTo(route.BuyAt)
@@ -357,6 +359,8 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 	}, correlationId)
 	expanses += txExpanses
 	revenue += txRevenue
+
+	s.tradeRoute = nil
 
 	return revenue, expanses, nil
 }

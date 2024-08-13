@@ -28,4 +28,5 @@ type Ships struct {
 	Cargo        string
 	Route        *string
 	UpdatedAt    time.Time
+	TradeRoute   *string
 }

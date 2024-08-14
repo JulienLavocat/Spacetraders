@@ -31,7 +31,7 @@ type Sdk struct {
 	Ready        bool
 }
 
-func NewSdk() *Sdk {
+func NewSdk(updateAgentBalance bool) *Sdk {
 	logger := log.With().Str("component", "SDK").Logger()
 
 	db, err := sql.Open("postgres", "postgresql://spacetraders:spacetraders@localhost:5432/spacetraders?sslmode=disable")
@@ -63,7 +63,9 @@ func NewSdk() *Sdk {
 	sdk.FactionsApi = sdk.Client.FactionsAPI
 	sdk.ContractsApi = sdk.Client.ContractsAPI
 
-	go sdk.updateAgentBalance()
+	if updateAgentBalance {
+		go sdk.updateAgentBalance()
+	}
 
 	return sdk
 }

@@ -7,4 +7,5 @@ tasks:
   jet: jet -dsn="postgresql://spacetraders:spacetraders@localhost:5432/spacetraders?sslmode=disable" -schema=public -path=./.gen -ignore-tables=spatial_ref_sys
   test: go test ./...
   market-updater: go run cmd/market_updater/main.go
+  api: go run cmd/api/main.go
 

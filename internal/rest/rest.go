@@ -21,18 +21,8 @@ type RestApi struct {
 
 func NewRestApi(s *sdk.Sdk) *RestApi {
 	return &RestApi{
-		miningFleets: make(map[string]*ai.MiningFleet),
-		tradingFleet: make(map[string]*ai.TradingFleet),
-		s:            s,
+		s: s,
 	}
-}
-
-func (r *RestApi) AddMiningFleet(fleet *ai.MiningFleet) {
-	r.miningFleets[fleet.Id] = fleet
-}
-
-func (r *RestApi) AddTradingFleet(fleet *ai.TradingFleet) {
-	r.tradingFleet[fleet.Id] = fleet
 }
 
 func (r *RestApi) StartApi() {
@@ -43,14 +33,12 @@ func (r *RestApi) StartApi() {
 	r.db = db
 
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
 
-	router.Use(gin.Recovery())
+	router := gin.Default()
 
 	router.GET("/", r.ping)
 	router.GET("/ships/:shipId", r.getShip)
 	router.GET("/ships/:shipId/plot/:destination", r.getShipRouteToWaypoint)
-	router.GET("/fleets/mining/:fleetId", r.getMiningFleet)
 	router.GET("/fleets/trading/:fleetId", r.getTradingFleet)
 	router.GET("/market/:systemId", r.listTradeRoutes)
 
@@ -67,25 +55,24 @@ func (r *RestApi) listTradeRoutes(c *gin.Context) {
 func (r *RestApi) getTradingFleet(c *gin.Context) {
 	fleetId := c.Param("fleetId")
 
-	fleet, ok := r.tradingFleet[fleetId]
-	if !ok {
-		c.JSON(404, gin.H{"error": "fleet not found"})
+	q := TradingFleets.SELECT(TradingFleets.AllColumns).WHERE(TradingFleets.ID.EQ(String(fleetId)))
+	var result []model.TradingFleets
+	if err := q.Query(r.db, &result); err != nil {
+		c.JSON(500, gin.H{"message": "unable to query trading fleets", "error": err})
 		return
 	}
 
-	c.JSON(200, fleet.GetSnapshot())
-}
-
-func (r *RestApi) getMiningFleet(c *gin.Context) {
-	fleetId := c.Param("fleetId")
-
-	fleet, ok := r.miningFleets[fleetId]
-	if !ok {
-		c.JSON(404, gin.H{"error": "fleet not found"})
+	if len(result) == 0 {
+		c.JSON(404, gin.H{"message": "fleet not found"})
 		return
 	}
 
-	c.JSON(200, fleet.GetSnapshot())
+	fleet, err := adaptTradingFleet(result[0])
+	if err != nil {
+		c.JSON(500, gin.H{"message": "unable to parse fleet", "error": err})
+	}
+
+	c.JSON(200, fleet)
 }
 
 func (r *RestApi) getShipRouteToWaypoint(c *gin.Context) {
@@ -117,6 +104,7 @@ func (r *RestApi) getShip(c *gin.Context) {
 
 	if len(result) == 0 {
 		c.JSON(404, gin.H{"message": "ship not found"})
+		return
 	}
 
 	c.JSON(200, result[0])

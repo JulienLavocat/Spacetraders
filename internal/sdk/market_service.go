@@ -306,8 +306,6 @@ func (m *Market) GetTradeRoutes(systemId string) []*TradeRoute {
 		return cmp.Compare(b.EstimatedProfits, a.EstimatedProfits)
 	})
 
-	log.Debug().Interface("routes", tradeRoutes).Msg(systemId)
-
 	return tradeRoutes
 }
 

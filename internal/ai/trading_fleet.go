@@ -1,9 +1,13 @@
 package ai
 
 import (
+	"encoding/json"
 	"sync/atomic"
 	"time"
 
+	. "github.com/go-jet/jet/v2/postgres"
+	"github.com/julienlavocat/spacetraders/.gen/spacetraders/public/model"
+	. "github.com/julienlavocat/spacetraders/.gen/spacetraders/public/table"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
 	"github.com/julienlavocat/spacetraders/internal/utils"
 	"github.com/rs/zerolog"
@@ -27,8 +31,9 @@ type TradingFleet struct {
 }
 
 type ShipResults struct {
-	Revenue  atomic.Int64 `json:"revenue"`
-	Expanses atomic.Int64 `json:"expanses"`
+	TradeRoute *sdk.TradeRoute
+	Revenue    atomic.Int64
+	Expanses   atomic.Int64
 }
 
 func NewShipResults() *ShipResults {
@@ -95,6 +100,7 @@ func (t *TradingFleet) BeginOperations() {
 		}
 
 		t.logger.Info().Interface("route", tradeRoute).Str("ship", ship.Id).Msgf("found trade route for ship %s", ship.Id)
+		t.shipsResults[ship.Id].TradeRoute = tradeRoute
 
 		go func(route *sdk.TradeRoute) {
 			revenue, expanses, err := ship.FollowTradeRoute(route)
@@ -111,11 +117,9 @@ func (t *TradingFleet) BeginOperations() {
 
 			t.shipAvailables <- ship
 		}(tradeRoute)
-	}
-}
 
-func (t *TradingFleet) GetSnapshot() TradingFleetSnapshot {
-	return newTradingFleetSnapshot(t)
+		t.reportStatus()
+	}
 }
 
 func (t *TradingFleet) getNextTradeRoute() *sdk.TradeRoute {
@@ -131,4 +135,45 @@ func (t *TradingFleet) getNextTradeRoute() *sdk.TradeRoute {
 	}
 
 	return t.tradeRoutes.Dequeue()
+}
+
+func (t *TradingFleet) reportStatus() {
+	shipsResultsSnapshot := make(map[string]TradingShipResulsSnapshot)
+	for shipId, results := range t.shipsResults {
+		shipsResultsSnapshot[shipId] = TradingShipResulsSnapshot{
+			Revenue:    results.Revenue.Load(),
+			Expanses:   results.Expanses.Load(),
+			TradeRoute: results.TradeRoute,
+		}
+	}
+
+	shipsResultsJson, err := json.Marshal(shipsResultsSnapshot)
+	if err != nil {
+		t.logger.Error().Err(err).Msgf("unable to marshall ships results")
+		return
+	}
+	shipsResults := string(shipsResultsJson)
+
+	q := TradingFleets.INSERT(TradingFleets.AllColumns).
+		ON_CONFLICT(TradingFleets.ID).
+		DO_UPDATE(SET(
+			TradingFleets.SystemID.SET(TradingFleets.EXCLUDED.SystemID),
+			TradingFleets.StartTime.SET(TradingFleets.EXCLUDED.StartTime),
+			TradingFleets.Revenue.SET(TradingFleets.EXCLUDED.Revenue),
+			TradingFleets.Expanses.SET(TradingFleets.EXCLUDED.Expanses),
+			TradingFleets.Ships.SET(TradingFleets.EXCLUDED.Ships),
+			TradingFleets.UpdatedAt.SET(NOW()),
+		)).MODEL(model.TradingFleets{
+		ID:        t.Id,
+		SystemID:  t.systemId,
+		StartTime: t.startTime,
+		Revenue:   t.revenue.Load(),
+		Expanses:  t.expanses.Load(),
+		Ships:     &shipsResults,
+	})
+
+	_, err = q.Exec(t.s.DB)
+	if err != nil {
+		t.logger.Error().Err(err).Msg("unable to report status")
+	}
 }

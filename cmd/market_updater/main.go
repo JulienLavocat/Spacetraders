@@ -11,7 +11,7 @@ import (
 func main() {
 	utils.SetupLogger()
 
-	s := sdk.NewSdk()
+	s := sdk.NewSdk(true)
 
 	probesFleet := ai.NewMarketProbesFleet(s)
 	probesFleet.BeginOperations("XI-NT44", time.Second*5)

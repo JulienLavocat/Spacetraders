@@ -19,6 +19,7 @@ func UseSchema(schema string) {
 	Ships = Ships.FromSchema(schema)
 	ShipsCargo = ShipsCargo.FromSchema(schema)
 	Systems = Systems.FromSchema(schema)
+	TradingFleets = TradingFleets.FromSchema(schema)
 	Traits = Traits.FromSchema(schema)
 	Transactions = Transactions.FromSchema(schema)
 	Waypoints = Waypoints.FromSchema(schema)

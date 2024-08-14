@@ -40,42 +40,8 @@ func newMiningFleetSnapshot(fleet *MiningFleet) MiningFleetSnapshot {
 	}
 }
 
-type TradingFleetSnapshot struct {
-	StartTime    time.Time                            `json:"startTime"`
-	ShipsResults map[string]TradingShipResulsSnapshot `json:"shipsResults"`
-	Id           string                               `json:"id"`
-	SystemId     string                               `json:"systemId"`
-	Ships        []string                             `json:"ships"`
-	Revenue      int64                                `json:"revenue"`
-	Expanses     int64                                `json:"expanses"`
-}
-
-func newTradingFleetSnapshot(fleet *TradingFleet) TradingFleetSnapshot {
-	assignedShips := make([]string, len(fleet.ships))
-	for i, ship := range fleet.ships {
-		assignedShips[i] = ship.Id
-	}
-
-	shipsResults := make(map[string]TradingShipResulsSnapshot)
-	for shipId, results := range fleet.shipsResults {
-		shipsResults[shipId] = TradingShipResulsSnapshot{
-			Revenue:  results.Revenue.Load(),
-			Expanses: results.Expanses.Load(),
-		}
-	}
-
-	return TradingFleetSnapshot{
-		StartTime:    fleet.startTime,
-		Ships:        assignedShips,
-		Id:           fleet.Id,
-		SystemId:     fleet.systemId,
-		Revenue:      fleet.revenue.Load(),
-		Expanses:     fleet.expanses.Load(),
-		ShipsResults: shipsResults,
-	}
-}
-
 type TradingShipResulsSnapshot struct {
-	Revenue  int64
-	Expanses int64
+	TradeRoute *sdk.TradeRoute `json:"tradeRoute"`
+	Revenue    int64           `json:"revenue"`
+	Expanses   int64           `json:"expanses"`
 }

@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	s := sdk.NewSdk()
+	s := sdk.NewSdk(true)
 
 	// api := rest.NewRestApi()
 	// go api.StartApi(s)

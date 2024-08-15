@@ -34,6 +34,8 @@ type Ship struct {
 	HasCargo        bool
 }
 
+type TradeRouteStepCallback func(step string)
+
 func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 	s := &Ship{
 		Id:              ship.Symbol,
@@ -46,7 +48,7 @@ func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 	}
 
 	s.setCargo(ship.Cargo)
-	s.setNav(ship.Nav, true)
+	s.setNav(ship.Nav)
 	s.reportStatus()
 
 	if ship.Cooldown.HasExpiration() {
@@ -101,7 +103,7 @@ func (s *Ship) NavigateTo(destination string) int32 {
 			Str("shipId", s.Id).
 			Msgf("navigation will take %.2fs and consume %d fuel (current: %d/%d)", navigationTime.Seconds(), res.Data.Fuel.Consumed.Amount, res.Data.Fuel.Current, res.Data.Fuel.Capacity)
 
-		s.setNav(res.Data.Nav, false)
+		s.setNav(res.Data.Nav)
 		s.Fuel = res.Data.Fuel
 		s.reportStatus()
 
@@ -125,7 +127,7 @@ func (s *Ship) Orbit() *Ship {
 
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.OrbitShip(s.ctx, s.Id).Execute, s.logger, "unable to move to orbit")
 
-	s.setNav(res.Data.Nav, false)
+	s.setNav(res.Data.Nav)
 	s.reportStatus()
 
 	return s
@@ -143,7 +145,7 @@ func (s *Ship) Dock() *Ship {
 
 	res := utils.RetryRequest(s.sdk.Client.FleetAPI.DockShip(s.ctx, s.Id).Execute, s.logger, "unable to dock ship")
 
-	s.setNav(res.Data.Nav, false)
+	s.setNav(res.Data.Nav)
 	s.reportStatus()
 
 	return s
@@ -351,7 +353,7 @@ func (s *Ship) Buy(product string, amount int32, correlationId string) (int32, e
 	return res.Data.Transaction.TotalPrice, nil
 }
 
-func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
+func (s *Ship) FollowTradeRoute(route *TradeRoute, stepCallback TradeRouteStepCallback) (int32, int32, error) {
 	s.ensureCooldown()
 
 	revenue := int32(0)
@@ -361,6 +363,7 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 
 	amount := min(s.MaxCargo-s.CurrentCargo, route.MaxAmount)
 	expanses += s.NavigateTo(route.BuyAt)
+	stepCallback("BUYING")
 	amount = min(amount, int32(s.sdk.Balance.Load()/int64(route.BuyPrice)))
 	s.logger.Debug().Msgf("buying %d %s (availableCargo: %d, volume: %d, balance: %d, buyPrice: %d)", amount, route.Product, s.MaxCargo-s.CurrentCargo, route.MaxAmount, s.sdk.Balance.Load(), route.BuyPrice)
 	if amount <= 0 {
@@ -373,6 +376,7 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute) (int32, int32, error) {
 		return revenue, expanses, err
 	}
 
+	stepCallback("SELLING")
 	txRevenue, txExpanses := s.Sell([]SellPlan{
 		{
 			ToSell: Cargo{
@@ -393,7 +397,7 @@ func (s *Ship) GetSnapshot() ShipSnapshot {
 	return newShipSnapshot(s)
 }
 
-func (s *Ship) setNav(data api.ShipNav, initial bool) {
+func (s *Ship) setNav(data api.ShipNav) {
 	s.logger.Debug().Interface("nav", data).Msg("navigation updated")
 
 	s.Nav = data

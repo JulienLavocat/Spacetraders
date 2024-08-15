@@ -37,15 +37,15 @@ type OpportunityRow struct {
 }
 
 type TradeRoute struct {
-	Product                 string
-	BuyAt                   string
-	SellAt                  string
-	MaxAmount               int32
-	SellPrice               int32
-	BuyPrice                int32
-	EstimatedProfits        int32
-	EstimatedProfitsPerUnit int32
-	FuelCost                int32
+	Product                 string `json:"product"`
+	BuyAt                   string `json:"buyAt"`
+	SellAt                  string `json:"sellAt"`
+	MaxAmount               int32  `json:"maxAmout"`
+	SellPrice               int32  `json:"sellPrice"`
+	BuyPrice                int32  `json:"buyPrice"`
+	EstimatedProfits        int32  `json:"estimatedProfits"`
+	EstimatedProfitsPerUnit int32  `json:"estimatedProfitsPerUnit"`
+	FuelCost                int32  `json:"fuelCost"`
 }
 
 func NewMarket(db *sql.DB, sdk *Sdk) *Market {

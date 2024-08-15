@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"sync/atomic"
 	"time"
 
 	. "github.com/go-jet/jet/v2/postgres"
@@ -12,6 +11,7 @@ import (
 	"github.com/julienlavocat/spacetraders/internal/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"go.uber.org/atomic"
 )
 
 type TradingFleet struct {
@@ -20,7 +20,7 @@ type TradingFleet struct {
 	lastTradeRoutesUpdates time.Time
 	s                      *sdk.Sdk
 	shipAvailables         chan *sdk.Ship
-	shipsResults           map[string]*ShipResults
+	shipsResults           map[string]*TradingShipResults
 	systemId               string
 	Id                     string
 	tradeRoutes            utils.Queue[*sdk.TradeRoute]
@@ -30,16 +30,20 @@ type TradingFleet struct {
 	updateInterval         time.Duration
 }
 
-type ShipResults struct {
-	TradeRoute *sdk.TradeRoute
-	Revenue    atomic.Int64
-	Expanses   atomic.Int64
+type TradingShipResults struct {
+	TradeRoute      *sdk.TradeRoute `json:"tradeRoute"`
+	Step            string          `json:"step"`
+	Revenue         atomic.Int64    `json:"revenue"`
+	Expanses        atomic.Int64    `json:"expanses"`
+	TradesCompleted int32           `json:"tradesCompleted"`
 }
 
-func NewShipResults() *ShipResults {
-	return &ShipResults{
-		Revenue:  atomic.Int64{},
-		Expanses: atomic.Int64{},
+func NewShipResults() *TradingShipResults {
+	return &TradingShipResults{
+		Revenue:         atomic.Int64{},
+		Expanses:        atomic.Int64{},
+		TradesCompleted: 0,
+		Step:            "BUYING",
 	}
 }
 
@@ -67,7 +71,7 @@ func NewTradingFleet(s *sdk.Sdk, fleetId string, systemId string, updateInterval
 		expanses:       atomic.Int64{},
 		shipAvailables: make(chan *sdk.Ship, 100),
 		startTime:      time.Now().UTC(),
-		shipsResults:   make(map[string]*ShipResults),
+		shipsResults:   make(map[string]*TradingShipResults),
 		updateInterval: updateInterval,
 		tradeRoutes:    utils.NewQueue[*sdk.TradeRoute](),
 	}
@@ -76,13 +80,15 @@ func NewTradingFleet(s *sdk.Sdk, fleetId string, systemId string, updateInterval
 func (t *TradingFleet) BeginOperations() {
 	t.startTime = time.Now().UTC()
 	for _, ship := range t.ships {
-		err := ship.JettisonCargo()
-		if err != nil {
-			t.logger.Warn().Str("ship", ship.Id).Interface("error", err).Msg("unable to jettison cargo")
-		}
+		go func() {
+			err := ship.JettisonCargo()
+			if err != nil {
+				t.logger.Warn().Str("ship", ship.Id).Interface("error", err).Msg("unable to jettison cargo")
+			}
 
-		t.shipsResults[ship.Id] = NewShipResults()
-		t.shipAvailables <- ship
+			t.shipsResults[ship.Id] = NewShipResults()
+			t.shipAvailables <- ship
+		}()
 	}
 
 	t.logger.Info().Msg("begining operations")
@@ -103,16 +109,23 @@ func (t *TradingFleet) BeginOperations() {
 		t.shipsResults[ship.Id].TradeRoute = tradeRoute
 
 		go func(route *sdk.TradeRoute) {
-			revenue, expanses, err := ship.FollowTradeRoute(route)
+			results := t.shipsResults[ship.Id]
+
+			revenue, expanses, err := ship.FollowTradeRoute(route, func(step string) {
+				results.Step = step
+				log.Debug().Interface("res", results).Msgf("status updated: %s", step)
+				t.reportStatus()
+			})
 			t.revenue.Add(int64(revenue))
 			t.expanses.Add(int64(expanses))
 
-			results := t.shipsResults[ship.Id]
 			results.Revenue.Add(int64(revenue))
 			results.Expanses.Add(int64(expanses))
 
 			if err != nil {
 				t.logger.Error().Err(err).Str("ship", ship.Id).Msgf("ship %s failed to follow trade route", ship.Id)
+			} else {
+				results.TradesCompleted++
 			}
 
 			t.shipAvailables <- ship
@@ -138,16 +151,7 @@ func (t *TradingFleet) getNextTradeRoute() *sdk.TradeRoute {
 }
 
 func (t *TradingFleet) reportStatus() {
-	shipsResultsSnapshot := make(map[string]TradingShipResulsSnapshot)
-	for shipId, results := range t.shipsResults {
-		shipsResultsSnapshot[shipId] = TradingShipResulsSnapshot{
-			Revenue:    results.Revenue.Load(),
-			Expanses:   results.Expanses.Load(),
-			TradeRoute: results.TradeRoute,
-		}
-	}
-
-	shipsResultsJson, err := json.Marshal(shipsResultsSnapshot)
+	shipsResultsJson, err := json.Marshal(t.shipsResults)
 	if err != nil {
 		t.logger.Error().Err(err).Msgf("unable to marshall ships results")
 		return

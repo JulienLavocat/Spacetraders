@@ -39,9 +39,3 @@ func newMiningFleetSnapshot(fleet *MiningFleet) MiningFleetSnapshot {
 		StartTime:  fleet.startTime,
 	}
 }
-
-type TradingShipResulsSnapshot struct {
-	TradeRoute *sdk.TradeRoute `json:"tradeRoute"`
-	Revenue    int64           `json:"revenue"`
-	Expanses   int64           `json:"expanses"`
-}

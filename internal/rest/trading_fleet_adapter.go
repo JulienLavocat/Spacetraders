@@ -35,7 +35,9 @@ func adaptTradingFleet(fleet model.TradingFleets) (*TradingFleet, error) {
 }
 
 type TradingShipResults struct {
-	TradeRoute *sdk.TradeRoute `json:"tradeRoute"`
-	Revenue    int64           `json:"revenue"`
-	Expanses   int64           `json:"expanses"`
+	TradeRoute      *sdk.TradeRoute `json:"tradeRoute"`
+	Step            string          `json:"step"`
+	Revenue         int64           `json:"revenue"`
+	Expanses        int64           `json:"expanses"`
+	TradesCompleted int32           `json:"tradesCompleted"`
 }

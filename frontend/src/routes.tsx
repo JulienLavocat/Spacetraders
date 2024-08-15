@@ -4,6 +4,7 @@ import { Starmap } from "@/pages/starmap/Starmap";
 import { Home } from "@/pages/home/Home";
 import { Ships } from "@/pages/ships/Ships";
 import { BreadcrumbData } from "./hooks/use-breadcrumbs";
+import { Wallet } from "./pages/wallet/Wallet";
 
 export const router = createBrowserRouter([
   {
@@ -33,6 +34,13 @@ export const router = createBrowserRouter([
         element: <Ships />,
         handle: {
           crumb: { name: "Ships", link: "ships" } as BreadcrumbData,
+        },
+      },
+      {
+        path: "/wallet",
+        element: <Wallet />,
+        handle: {
+          crumb: { name: "Wallet", link: "wallet" } as BreadcrumbData,
         },
       },
     ],

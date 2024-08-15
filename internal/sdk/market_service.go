@@ -40,7 +40,7 @@ type TradeRoute struct {
 	Product                 string `json:"product"`
 	BuyAt                   string `json:"buyAt"`
 	SellAt                  string `json:"sellAt"`
-	MaxAmount               int32  `json:"maxAmout"`
+	MaxAmount               int32  `json:"maxAmount"`
 	SellPrice               int32  `json:"sellPrice"`
 	BuyPrice                int32  `json:"buyPrice"`
 	EstimatedProfits        int32  `json:"estimatedProfits"`

@@ -32,6 +32,7 @@ export function DashboardLayout() {
           <NavLink icon="house" text="Home" link="home"></NavLink>
           <NavLink icon="rocket" text="Ships" link="ships"></NavLink>
           <NavLink icon="orbit" text="Starmap" link="starmap"></NavLink>
+          <NavLink icon="wallet" text="Wallet" link="wallet"></NavLink>
         </nav>
         <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
           <Tooltip>

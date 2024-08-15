@@ -1,5 +1,6 @@
 import { Ship } from "@/api/api";
 import { Progress } from "@/components/ui/progress";
+import { formatCurrency } from "@/utils/format-currency";
 import { createDurationFormatter } from "@/utils/format-duration";
 import { AtSign, MoveRight } from "lucide-react";
 
@@ -47,6 +48,9 @@ export function PayloadColumn({ ship }: { ship: Ship }) {
   );
 }
 export function RouteColumn({ ship }: { ship: Ship }) {
+  if (!ship.route) {
+    return null;
+  }
   return (
     <div className="flex gap-2 items-center">
       {ship.route
@@ -61,14 +65,9 @@ export function RouteColumn({ ship }: { ship: Ship }) {
 export function TradeRouteColumn({ ship }: { ship: Ship }) {
   const route = ship.tradeRoute;
 
-  const formatCurrency = (value: number) => {
-    return Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-      maximumFractionDigits: 0,
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
+  if (!route) {
+    return null;
+  }
 
   return (
     <>

@@ -7,6 +7,7 @@ import (
 	. "github.com/go-jet/jet/v2/postgres"
 	"github.com/julienlavocat/spacetraders/.gen/spacetraders/public/model"
 	. "github.com/julienlavocat/spacetraders/.gen/spacetraders/public/table"
+	"github.com/julienlavocat/spacetraders/internal/rest/adapters"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
 	"github.com/rs/zerolog/log"
 )
@@ -43,6 +44,7 @@ func (r *RestApi) StartApi() {
 	router.GET("/ships/:shipId/plot/:destination", getShipRouteToWaypoint)
 	router.GET("/fleets/trading/:fleetId", r.getTradingFleet)
 	router.GET("/market/:systemId", r.listTradeRoutes)
+	router.GET("/transactions", listTransaction)
 
 	if err := router.Run("0.0.0.0:8080"); err != nil {
 		log.Fatal().Err(err).Msg("unable to start API")
@@ -69,7 +71,7 @@ func (r *RestApi) getTradingFleet(c *gin.Context) {
 		return
 	}
 
-	fleet, err := adaptTradingFleet(result[0])
+	fleet, err := adapters.AdaptTradingFleet(result[0])
 	if err != nil {
 		c.JSON(500, gin.H{"message": "unable to parse fleet", "error": err})
 	}

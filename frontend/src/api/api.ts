@@ -38,12 +38,24 @@ export interface Ship {
   isCargoFull: boolean;
 }
 
+export const API_URL = "http://localhost:8080";
+
+export function createQueryParams(params: Record<string, any>): string {
+  const filtered = Object.fromEntries(
+    Object.entries(params)
+      .map(([key, value]) => (!value ? null : [key, value]))
+      .filter((e) => !!e),
+  );
+
+  return new URLSearchParams(filtered).toString();
+}
+
 export function useListShips() {
   return useQuery<Ship[]>({
     queryKey: "listShips",
     refetchInterval: 2000,
     queryFn: async () => {
-      const res = await fetch("http://localhost:8080/ships");
+      const res = await fetch(`${API_URL}/ships`);
       return res.json();
     },
   });

@@ -5,6 +5,7 @@ import (
 	. "github.com/go-jet/jet/v2/postgres"
 	"github.com/julienlavocat/spacetraders/.gen/spacetraders/public/model"
 	. "github.com/julienlavocat/spacetraders/.gen/spacetraders/public/table"
+	"github.com/julienlavocat/spacetraders/internal/rest/adapters"
 )
 
 func listShips(c *gin.Context) {
@@ -16,9 +17,9 @@ func listShips(c *gin.Context) {
 		return
 	}
 
-	ships := make([]*Ship, len(results))
+	ships := make([]*adapters.Ship, len(results))
 	for i := range results {
-		ship, err := adaptShip(results[i])
+		ship, err := adapters.AdaptShip(results[i])
 		if err != nil {
 			internalServerError(c, "unable to adapt ship", err)
 			return

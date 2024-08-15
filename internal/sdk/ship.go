@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/utils"
+	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -60,12 +60,12 @@ func NewShip(sdk *Sdk, ship api.Ship) *Ship {
 	return s
 }
 
-func (s *Ship) NavigateTo(destination string) int32 {
+func (s *Ship) NavigateTo(destination string, correlationId string) int32 {
 	s.ensureCooldown()
 	s.logger.Info().Msgf("plotting route from %s to %s", s.Nav.WaypointSymbol, destination)
 	expanses := int32(0)
 
-	expanses += s.Refuel()
+	expanses += s.Refuel(correlationId)
 
 	route, err := s.sdk.Navigation.PlotRoute(s.Nav.SystemSymbol, s.Nav.WaypointSymbol, destination, s.Fuel.Current)
 	if err != nil {
@@ -89,7 +89,7 @@ func (s *Ship) NavigateTo(destination string) int32 {
 			continue
 		}
 
-		expanses += s.Refuel()
+		expanses += s.Refuel(correlationId)
 
 		s.Orbit()
 
@@ -111,7 +111,7 @@ func (s *Ship) NavigateTo(destination string) int32 {
 		s.logger.Info().Str("shipId", s.Id).Msgf("navigated to %s", nextStop.To)
 	}
 
-	expanses += s.Refuel()
+	expanses += s.Refuel(correlationId)
 
 	return expanses
 }
@@ -158,11 +158,11 @@ func (s *Ship) Sell(plan []SellPlan, correlationId string) (int32, int32) {
 	expanses := int32(0)
 
 	for _, step := range plan {
-		expanses += s.NavigateTo(step.Location)
+		expanses += s.NavigateTo(step.Location, correlationId)
 
 		s.Dock()
 
-		expanses += s.Refuel()
+		expanses += s.Refuel(correlationId)
 
 		for product, amount := range step.ToSell {
 			res := utils.RetryRequest(
@@ -186,7 +186,7 @@ func (s *Ship) Sell(plan []SellPlan, correlationId string) (int32, int32) {
 	return revenue, expanses
 }
 
-func (s *Ship) Refuel() int32 {
+func (s *Ship) Refuel(correlationId string) int32 {
 	s.ensureCooldown()
 	s.Dock()
 
@@ -207,6 +207,12 @@ func (s *Ship) Refuel() int32 {
 		res.Data.Transaction.PricePerUnit,
 		res.Data.Agent.Credits)
 
+	if res.Data.Transaction.Units > 0 {
+		if err := s.sdk.Market.ReportTransaction(res.Data.Transaction, res.Data.Agent.Credits, correlationId); err != nil {
+			s.logger.Error().Err(err).Interface("transation", res.Data.Transaction).Interface("agent", res.Data.Agent).Msgf("unable to report transation")
+		}
+	}
+
 	s.reportStatus()
 
 	return res.Data.Transaction.TotalPrice
@@ -226,7 +232,6 @@ func (s *Ship) Mine() *Ship {
 		s.setCooldown(*res.Data.Cooldown.Expiration)
 	}
 
-	// s.enterCooldown(time.Duration(res.Data.Cooldown.RemainingSeconds) * time.Second)
 	s.reportStatus()
 
 	return s
@@ -236,6 +241,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 	// TODO: Sort before iterating, just in case some destinations aren't the same to avoid unecessary trips between different goods
 
 	s.ensureCooldown()
+	corelationId := xid.New().String()
 
 	canBeFulfilled := true
 	for _, term := range contract.Terms.Deliver {
@@ -254,7 +260,7 @@ func (s *Ship) DeliverAndFulfillContract(contract api.Contract) api.Contract {
 		amount := min(amountInCargo, term.UnitsRequired-term.UnitsFulfilled)
 		product := term.TradeSymbol
 
-		s.NavigateTo(term.DestinationSymbol)
+		s.NavigateTo(term.DestinationSymbol, corelationId)
 		s.Dock()
 
 		res := utils.RetryRequest(
@@ -358,11 +364,11 @@ func (s *Ship) FollowTradeRoute(route *TradeRoute, stepCallback TradeRouteStepCa
 
 	revenue := int32(0)
 	expanses := int32(0)
-	correlationId := uuid.NewString()
+	correlationId := xid.New().String()
 	s.tradeRoute = route
 
 	amount := min(s.MaxCargo-s.CurrentCargo, route.MaxAmount)
-	expanses += s.NavigateTo(route.BuyAt)
+	expanses += s.NavigateTo(route.BuyAt, correlationId)
 	stepCallback("BUYING")
 	amount = min(amount, int32(s.sdk.Balance.Load()/int64(route.BuyPrice)))
 	s.logger.Debug().Msgf("buying %d %s (availableCargo: %d, volume: %d, balance: %d, buyPrice: %d)", amount, route.Product, s.MaxCargo-s.CurrentCargo, route.MaxAmount, s.sdk.Balance.Load(), route.BuyPrice)
@@ -404,11 +410,7 @@ func (s *Ship) setNav(data api.ShipNav) {
 	s.IsDocked = data.Status == api.DOCKED
 	s.IsInOrbit = data.Status == api.IN_ORBIT
 
-	// If ship is a probe and it's the initial load time, we don't wait for it's cooldown as they are only moved once (for market data purposes)
 	if s.Nav.Route.Arrival.After(time.Now().UTC()) {
-		// navigationTime := s.Nav.Route.Arrival.Sub(s.Nav.Route.DepartureTime)
-		// s.enterCooldown(navigationTime)
-		// s.ensureCooldown(&s.Nav.Route.Arrival)
 		s.setCooldown(s.Nav.Route.Arrival)
 	}
 }

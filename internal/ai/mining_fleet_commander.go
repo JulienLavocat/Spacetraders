@@ -7,6 +7,7 @@ import (
 
 	"github.com/julienlavocat/spacetraders/internal/api"
 	"github.com/julienlavocat/spacetraders/internal/sdk"
+	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -14,14 +15,15 @@ import (
 type MiningFleet struct {
 	logger           zerolog.Logger
 	startTime        time.Time
-	shipStates       map[string]string
+	s                *sdk.Sdk
 	hauler           *sdk.Ship
 	shipNeedsHauling chan string
 	miners           map[string]*sdk.Ship
-	s                *sdk.Sdk
+	shipStates       map[string]string
 	Id               string
 	systemId         string
 	target           string
+	correlationId    string
 	sellPlan         []sdk.SellPlan
 	revenue          int32
 	expanses         int32
@@ -50,12 +52,13 @@ func NewMiningFleet(s *sdk.Sdk, id string, minersIds []string, haulerId string) 
 	shipStates[hauler.Id] = "IDLE"
 
 	fleet := &MiningFleet{
-		logger:     logger,
-		s:          s,
-		miners:     ships,
-		hauler:     hauler,
-		shipStates: shipStates,
-		Id:         id,
+		logger:        logger,
+		s:             s,
+		miners:        ships,
+		hauler:        hauler,
+		shipStates:    shipStates,
+		Id:            id,
+		correlationId: xid.New().String(),
 	}
 
 	return fleet
@@ -111,7 +114,7 @@ func (m *MiningFleet) moveFleetToTarget() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			m.miners[i].NavigateTo(m.target)
+			m.miners[i].NavigateTo(m.target, m.correlationId)
 			m.logger.Info().Msgf("miner %s arrived at target %s", m.miners[i].Id, m.target)
 		}()
 	}
@@ -125,7 +128,7 @@ func (m *MiningFleet) moveFleetToTarget() {
 			m.sellHaulerCargo()
 		}
 
-		m.hauler.NavigateTo(m.target)
+		m.hauler.NavigateTo(m.target, m.correlationId)
 		m.logger.Info().Msgf("hauler %s arrived at target %s", m.hauler.Id, m.target)
 	}()
 
@@ -183,8 +186,8 @@ func (m *MiningFleet) sellHaulerCargo() {
 	m.shipStates[m.hauler.Id] = "SELLING"
 	m.sellPlan = m.s.Market.CreateSellPlan(m.systemId, m.hauler.Cargo)
 	revenue, expanses := m.hauler.Sell(m.sellPlan, m.Id)
-	expanses += m.hauler.Refuel()
-	m.hauler.NavigateTo(m.target)
+	expanses += m.hauler.Refuel(m.correlationId)
+	m.hauler.NavigateTo(m.target, m.correlationId)
 	m.shipStates[m.hauler.Id] = "IDLE"
 	m.revenue += revenue
 	m.expanses += expanses

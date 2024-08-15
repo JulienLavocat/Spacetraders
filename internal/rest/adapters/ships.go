@@ -1,4 +1,4 @@
-package rest
+package adapters
 
 import (
 	"encoding/json"
@@ -47,7 +47,7 @@ type Ship struct {
 	IsCargoFull  bool             `json:"isCargoFull"`
 }
 
-func adaptShip(s model.Ships) (*Ship, error) {
+func AdaptShip(s model.Ships) (*Ship, error) {
 	var cargo map[string]int32
 	err := json.Unmarshal([]byte(s.Cargo), &cargo)
 	if err != nil {
@@ -90,4 +90,17 @@ func adaptShip(s model.Ships) (*Ship, error) {
 		CurrentCargo: s.CurrentCargo,
 		MaxCargo:     s.MaxCargo,
 	}, nil
+}
+
+func AdaptShips(models []model.Ships) ([]*Ship, error) {
+	ships := make([]*Ship, len(models))
+	for i := range models {
+		ship, err := AdaptShip(models[i])
+		if err != nil {
+			return nil, err
+		}
+		ships[i] = ship
+	}
+
+	return ships, nil
 }

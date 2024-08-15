@@ -1,4 +1,4 @@
-package rest
+package adapters
 
 import (
 	"encoding/json"
@@ -17,7 +17,7 @@ type TradingFleet struct {
 	Expanses  int64                         `json:"expanses"`
 }
 
-func adaptTradingFleet(fleet model.TradingFleets) (*TradingFleet, error) {
+func AdaptTradingFleet(fleet model.TradingFleets) (*TradingFleet, error) {
 	var ships map[string]TradingShipResults
 	err := json.Unmarshal([]byte(*fleet.Ships), &ships)
 	if err != nil {

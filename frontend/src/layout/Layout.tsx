@@ -5,7 +5,6 @@ import {
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
-  BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import {
@@ -13,10 +12,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
+import React from "react";
 import { Link, Outlet } from "react-router-dom";
 import { NavLink } from "./NavLink";
 
 export function DashboardLayout() {
+  const breadcrumbs = useBreadcrumbs();
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
       <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
@@ -50,21 +52,16 @@ export function DashboardLayout() {
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
           <Breadcrumb className="hidden md:flex">
             <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link to="#">Dashboard</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link to="#">Products</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Edit Product</BreadcrumbPage>
-              </BreadcrumbItem>
+              {breadcrumbs.map((crumb, i) => (
+                <React.Fragment key={crumb.name + crumb.link}>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink asChild>
+                      <Link to={crumb.link}>{crumb.name}</Link>
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  {i < breadcrumbs.length - 1 ? <BreadcrumbSeparator /> : null}
+                </React.Fragment>
+              ))}
             </BreadcrumbList>
           </Breadcrumb>
         </header>

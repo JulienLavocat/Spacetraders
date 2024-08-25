@@ -1,7 +1,6 @@
 import { DashboardLayout } from "@/layout/Layout";
 import { Home } from "@/pages/home/Home";
 import { Ships } from "@/pages/ships/Ships";
-import { Starmap } from "@/pages/starmap/Starmap";
 import {
   createBrowserRouter,
   Navigate,
@@ -9,7 +8,9 @@ import {
   Params,
 } from "react-router-dom";
 import { BreadcrumbData } from "./hooks/use-breadcrumbs";
+import { SystemsMap } from "./pages/starmap/SystemsMap";
 import { Wallet } from "./pages/wallet/Wallet";
+import { SystemMap } from "./pages/starmap/SystemMap";
 
 export const router = createBrowserRouter([
   {
@@ -22,10 +23,25 @@ export const router = createBrowserRouter([
       },
       {
         path: "/starmap",
-        element: <Starmap />,
         handle: {
           crumb: () => ({ name: "Starmap", link: "starmap" }) as BreadcrumbData,
         },
+        children: [
+          {
+            path: "",
+            element: <SystemsMap />,
+          },
+          {
+            path: ":id",
+            element: <SystemMap />,
+            handle: {
+              crumb: (params: Params) => ({
+                name: params.id,
+                link: "/starmap/" + params.id,
+              }),
+            },
+          },
+        ],
       },
       {
         path: "/home",

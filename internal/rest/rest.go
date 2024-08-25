@@ -45,6 +45,8 @@ func (r *RestApi) StartApi() {
 	router.GET("/fleets/trading/:fleetId", r.getTradingFleet)
 	router.GET("/market/:systemId", r.listTradeRoutes)
 	router.GET("/transactions", listTransaction)
+	router.GET("/systems", listSystems)
+	router.GET("/systems/:systemId", listWaypoints)
 
 	if err := router.Run("0.0.0.0:8080"); err != nil {
 		log.Fatal().Err(err).Msg("unable to start API")

@@ -3,20 +3,19 @@ import {
   Transaction,
   useListTransactions,
 } from "@/api/transactions";
-import { formatCurrency } from "@/utils/format-currency";
-import { createDurationFormatter } from "@/utils/format-duration";
-import { ColumnDef } from "@tanstack/react-table";
-import { CorrelationIdColumn } from "../Columns";
-import { DataTable } from "@/components/ui/data-table";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { DataTable } from "@/components/ui/data-table";
 import { TypographyH2 } from "@/components/ui/typography";
+import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/utils/format-currency";
+import { createDurationFormatter } from "@/utils/format-duration";
+import { ColumnDef } from "@tanstack/react-table";
+import { CorrelationIdColumn } from "../Columns";
 
 const formatDuration = createDurationFormatter("narrow");
 

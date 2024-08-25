@@ -1,6 +1,5 @@
 import { useParams } from "react-router-dom";
 import { TransactionsTable } from "./transactions/Transactions";
-import { countReset } from "console";
 
 export function Wallet() {
   const correlationId = useParams().id;
